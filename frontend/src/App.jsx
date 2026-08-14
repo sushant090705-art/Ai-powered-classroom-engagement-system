@@ -1,25 +1,22 @@
-import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+import Home from "./Home";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
 function App() {
-  const [message, setMessage] = useState("Connecting to backend...");
-
-  useEffect(() => {
-    fetch("http://127.0.0.1:5000/")
-      .then((response) => response.text())
-      .then((data) => {
-        setMessage(data);
-      })
-      .catch(() => {
-        setMessage("Backend connection failed ❌");
-      });
-  }, []);
-
   return (
-    <div>
-      <h1>Classroom Engagement AI</h1>
+    <BrowserRouter>
+      <Routes>
 
-      <h2>{message}</h2>
-    </div>
+        <Route path="/" element={<Home />} />
+
+        <Route path="/login" element={<Login />} />
+
+        <Route path="/dashboard" element={<Dashboard />} />
+
+      </Routes>
+    </BrowserRouter>
   );
 }
 
