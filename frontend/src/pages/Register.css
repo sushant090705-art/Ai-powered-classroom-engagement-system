@@ -1,4 +1,4 @@
-.login-page {
+.register-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -7,7 +7,7 @@
   padding: 20px;
 }
 
-.login-card {
+.register-card {
   width: 100%;
   max-width: 430px;
   padding: 45px;
@@ -17,7 +17,7 @@
   box-shadow: 0 25px 60px rgba(31, 53, 92, 0.12);
 }
 
-.login-logo {
+.register-logo {
   width: 52px;
   height: 52px;
   margin: 0 auto 20px;
@@ -30,24 +30,24 @@
   font-size: 25px;
 }
 
-.login-card h1 {
+.register-card h1 {
   text-align: center;
   margin-bottom: 8px;
   color: #172033;
 }
 
-.login-subtitle {
+.register-subtitle {
   text-align: center;
   color: #7b8495;
   margin-bottom: 30px;
 }
 
-.login-card form {
+.register-card form {
   display: flex;
   flex-direction: column;
 }
 
-.login-card label {
+.register-card label {
   margin-bottom: 7px;
   margin-top: 16px;
   font-size: 14px;
@@ -55,7 +55,7 @@
   color: #344054;
 }
 
-.login-card input {
+.register-card input {
   padding: 13px 14px;
   border: 1px solid #d5dce8;
   border-radius: 9px;
@@ -63,11 +63,11 @@
   outline: none;
 }
 
-.login-card input:focus {
+.register-card input:focus {
   border-color: #2563eb;
 }
 
-.login-submit {
+.register-submit {
   margin-top: 25px;
   padding: 14px;
   border: none;
@@ -79,28 +79,15 @@
   cursor: pointer;
 }
 
-.back-home {
+.register-submit:hover {
+  background: #1d4ed8;
+}
+
+.back-login {
   width: 100%;
   margin-top: 18px;
   border: none;
   background: transparent;
   color: #667085;
   cursor: pointer;
-}
-
-.create-account {
-  width: 100%;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid #2563eb;
-  border-radius: 9px;
-  background: #2563eb;
-  color: white;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.create-account:hover {
-  background: #1d4ed8;
 }
