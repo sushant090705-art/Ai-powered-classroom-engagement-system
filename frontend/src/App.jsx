@@ -3,7 +3,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Home from "./Home";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import Register from "./pages/Register";
+import Classroom from "./pages/Classroom";
+import Analytics from "./pages/Analytics";
 
 function App() {
   return (
@@ -13,10 +14,12 @@ function App() {
         <Route path="/" element={<Home />} />
 
         <Route path="/login" element={<Login />} />
-        
-        <Route path="/register" element={<Register />} />
 
         <Route path="/dashboard" element={<Dashboard />} />
+
+        <Route path="/classroom" element={<Classroom />} />
+
+        <Route path="/analytics" element={<Analytics />} />
 
       </Routes>
     </BrowserRouter>

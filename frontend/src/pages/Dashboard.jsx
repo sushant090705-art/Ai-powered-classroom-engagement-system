@@ -30,9 +30,12 @@ function Dashboard() {
             <h1>Classroom Overview</h1>
           </div>
 
-          <button className="start-class-btn">
-            + Start Classroom
-          </button>
+          <button
+  className="start-class-btn"
+  onClick={() => navigate("/classroom")}
+>
+  Start Classroom
+</button>
         </div>
 
         <div className="dashboard-stats">
@@ -82,9 +85,12 @@ function Dashboard() {
             </p>
           </div>
 
-          <button className="start-class-btn">
-            Start Classroom
-          </button>
+          <button
+  className="start-class-btn"
+  onClick={() => navigate("/classroom")}
+>
+  + Start Classroom
+</button>
 
         </section>
 
