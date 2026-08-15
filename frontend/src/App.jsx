@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Classroom from "./pages/Classroom";
 import Analytics from "./pages/Analytics";
+import Register from "./pages/Register";
 
 function App() {
   return (
@@ -16,6 +17,8 @@ function App() {
         <Route path="/login" element={<Login />} />
 
         <Route path="/dashboard" element={<Dashboard />} />
+
+        <Route path="/register" element={<Register />} />
 
         <Route path="/classroom" element={<Classroom />} />
 
