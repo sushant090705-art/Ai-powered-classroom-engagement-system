@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 import "./Register.css";
 
 function Register() {
@@ -39,6 +40,9 @@ function Register() {
 
   return (
      <div className="register-page">
+       <div className="auth-theme-toggle">
+         <ThemeToggle />
+       </div>
        <div className="register-card">
 
         <div className="register-logo">

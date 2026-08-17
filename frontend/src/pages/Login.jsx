@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 import "./Login.css";
 
 function Login() {
@@ -38,6 +39,9 @@ function Login() {
 
   return (
     <div className="login-page">
+      <div className="auth-theme-toggle">
+        <ThemeToggle />
+      </div>
       <div className="login-card">
 
         <div className="login-logo">

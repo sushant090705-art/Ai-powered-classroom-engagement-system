@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "./components/ThemeToggle";
 import "./App.css";
 
 function Home() {
@@ -35,12 +36,15 @@ function Home() {
           <a href="#about">About</a>
         </div>
 
-        <button
-          className="login-btn"
-          onClick={() => navigate("/login")}
-        >
-          Teacher Login
-        </button>
+        <div className="nav-right">
+          <ThemeToggle />
+          <button
+            className="login-btn"
+            onClick={() => navigate("/login")}
+          >
+            Teacher Login
+          </button>
+        </div>
 
       </nav>
 

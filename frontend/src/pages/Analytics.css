@@ -1,13 +1,14 @@
 .analytics-page {
   min-height: 100vh;
-  background: #f6f8fc;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .analytics-nav {
   height: 70px;
   padding: 0 6%;
-  background: white;
-  border-bottom: 1px solid #e5eaf2;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -19,6 +20,7 @@
   align-items: center;
   font-weight: 700;
   font-size: 20px;
+  color: var(--text-primary);
 }
 
 .analytics-logo span {
@@ -27,18 +29,32 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   border-radius: 9px;
+}
+
+.analytics-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 
 .analytics-nav button,
 .analytics-heading button {
   padding: 10px 16px;
-  background: white;
-  border: 1px solid #d5dce8;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
   border-radius: 8px;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.analytics-nav button:hover,
+.analytics-heading button:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
 }
 
 .analytics-content {
@@ -53,7 +69,7 @@
 }
 
 .analytics-heading p {
-  color: #2563eb;
+  color: var(--accent-color);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -62,10 +78,11 @@
 .analytics-heading h1 {
   font-size: 32px;
   margin: 7px 0;
+  color: var(--text-primary);
 }
 
 .analytics-heading span {
-  color: #7b8495;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -76,17 +93,18 @@
 }
 
 .analytics-cards > div {
-  background: white;
-  border: 1px solid #e5eaf2;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 22px;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .analytics-cards small,
 .chart-card small,
 .analysis-card small {
   display: block;
-  color: #8993a5;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
 }
@@ -95,6 +113,7 @@
   display: block;
   margin: 10px 0;
   font-size: 30px;
+  color: var(--text-primary);
 }
 
 .analytics-cards span {
@@ -105,10 +124,11 @@
 .chart-card,
 .analysis-card {
   margin-top: 20px;
-  background: white;
-  border: 1px solid #e5eaf2;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 15px;
   padding: 25px;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .chart-header {
@@ -120,18 +140,22 @@
 .analysis-card h2 {
   margin-top: 7px;
   font-size: 19px;
+  color: var(--text-primary);
 }
 
 .chart-header select {
   padding: 8px;
-  border: 1px solid #d5dce8;
+  border: 1px solid var(--border-light);
+  background: var(--input-bg);
+  color: var(--text-primary);
   border-radius: 7px;
+  outline: none;
 }
 
 .fake-chart {
   height: 280px;
   margin-top: 30px;
-  border-bottom: 1px solid #dce2eb;
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: end;
   padding: 0 5%;
@@ -147,9 +171,10 @@
 
 .chart-line span {
   width: 8%;
-  background: #2563eb;
+  background: var(--accent-color);
   border-radius: 7px 7px 0 0;
   min-height: 20px;
+  transition: height 0.3s ease;
 }
 
 .analysis-grid {
@@ -162,27 +187,28 @@
   display: flex;
   justify-content: space-between;
   padding: 16px 0;
-  border-bottom: 1px solid #edf0f5;
+  border-bottom: 1px solid var(--border-divider);
   font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .emotion-row strong {
-  color: #2563eb;
+  color: var(--accent-color);
 }
 
 .insight {
   display: flex;
   gap: 12px;
   padding: 15px 0;
-  border-bottom: 1px solid #edf0f5;
+  border-bottom: 1px solid var(--border-divider);
 }
 
 .insight span {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: #e8f0ff;
-  color: #2563eb;
+  background: var(--bg-status);
+  color: var(--accent-color);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -191,7 +217,7 @@
 
 .insight p {
   margin: 0;
-  color: #667085;
+  color: var(--text-secondary);
   line-height: 1.5;
   font-size: 14px;
 }

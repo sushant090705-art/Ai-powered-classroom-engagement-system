@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 import "./Dashboard.css";
 
 function Dashboard() {
@@ -13,12 +14,15 @@ function Dashboard() {
           ◉ ClassroomAI
         </div>
 
-        <button
-          onClick={() => navigate("/")}
-          className="logout-btn"
-        >
-          Logout
-        </button>
+        <div className="dashboard-nav-right">
+          <ThemeToggle />
+          <button
+            onClick={() => navigate("/")}
+            className="logout-btn"
+          >
+            Logout
+          </button>
+        </div>
 
       </header>
 

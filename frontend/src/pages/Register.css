@@ -3,18 +3,25 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #f7faff, #eef4ff);
+  background: var(--bg-hero-gradient);
   padding: 20px;
+  position: relative;
+}
+
+.auth-theme-toggle {
+  position: absolute;
+  top: 25px;
+  right: 25px;
 }
 
 .register-card {
   width: 100%;
   max-width: 430px;
   padding: 45px;
-  background: white;
-  border: 1px solid #e5eaf2;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 20px;
-  box-shadow: 0 25px 60px rgba(31, 53, 92, 0.12);
+  box-shadow: 0 25px 60px var(--shadow-color);
 }
 
 .register-logo {
@@ -25,7 +32,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   font-size: 25px;
 }
@@ -33,12 +40,12 @@
 .register-card h1 {
   text-align: center;
   margin-bottom: 8px;
-  color: #172033;
+  color: var(--text-primary);
 }
 
 .register-subtitle {
   text-align: center;
-  color: #7b8495;
+  color: var(--text-muted);
   margin-bottom: 30px;
 }
 
@@ -52,19 +59,22 @@
   margin-top: 16px;
   font-size: 14px;
   font-weight: 600;
-  color: #344054;
+  color: var(--text-secondary);
 }
 
 .register-card input {
   padding: 13px 14px;
-  border: 1px solid #d5dce8;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text-primary);
   border-radius: 9px;
   font-size: 14px;
   outline: none;
+  transition: border-color 0.2s ease;
 }
 
 .register-card input:focus {
-  border-color: #2563eb;
+  border-color: var(--accent-color);
 }
 
 .register-submit {
@@ -72,15 +82,16 @@
   padding: 14px;
   border: none;
   border-radius: 9px;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .register-submit:hover {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .back-login {
@@ -88,6 +99,11 @@
   margin-top: 18px;
   border: none;
   background: transparent;
-  color: #667085;
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.back-login:hover {
+  color: var(--accent-color);
 }

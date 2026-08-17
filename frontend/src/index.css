@@ -1,7 +1,94 @@
+:root {
+  /* Light Theme Tokens */
+  --bg-primary: #f7f9fc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --bg-hero-gradient: linear-gradient(135deg, #f7faff, #eef4ff);
+  --bg-status: #e8f0ff;
+  --text-primary: #172033;
+  --text-secondary: #596579;
+  --text-muted: #7b8495;
+  --border-color: #e5eaf2;
+  --border-light: #d5dce8;
+  --border-divider: #edf0f5;
+  --accent-color: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #e8f0ff;
+  --shadow-color: rgba(31, 53, 92, 0.12);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --input-bg: #ffffff;
+  --input-border: #d5dce8;
+  --footer-bg: #101828;
+  --footer-text: #98a2b3;
+  --stat-icon-bg: #f1f5f9;
+  --progress-track: #e9edf4;
+}
+
+[data-theme="dark"] {
+  /* Dark Theme Tokens */
+  --bg-primary: #0b0f19;
+  --bg-secondary: #151e32;
+  --bg-card: #151e32;
+  --bg-hover: #1c2842;
+  --bg-hero-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #151e32 100%);
+  --bg-status: rgba(59, 130, 246, 0.2);
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --border-color: #23324d;
+  --border-light: #2d3f61;
+  --border-divider: #1e293b;
+  --accent-color: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-light: rgba(59, 130, 246, 0.2);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --input-bg: #0f172a;
+  --input-border: #334155;
+  --footer-bg: #070a12;
+  --footer-text: #64748b;
+  --stat-icon-bg: #1e293b;
+  --progress-track: #1e293b;
+}
+
 html {
   scroll-behavior: smooth;
+  color-scheme: light dark;
 }
 
 body {
   margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: Inter, Arial, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Global Transition for smooth theme switching */
+.app,
+.navbar,
+.hero,
+.features-section,
+.dashboard,
+.dashboard-nav,
+.dashboard-stat,
+.dashboard-panel,
+.classroom-page,
+.classroom-nav,
+.camera-card,
+.engagement-card,
+.emotion-card,
+.classroom-stat,
+.analytics-page,
+.analytics-nav,
+.analytics-cards > div,
+.chart-card,
+.analysis-card,
+.login-page,
+.login-card,
+.register-page,
+.register-card,
+footer {
+  transition: background-color 0.3s ease, background 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }

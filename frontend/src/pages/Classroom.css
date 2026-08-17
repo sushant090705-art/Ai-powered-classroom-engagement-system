@@ -1,13 +1,14 @@
 .classroom-page {
   min-height: 100vh;
-  background: #f6f8fc;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .classroom-nav {
   height: 70px;
   padding: 0 6%;
-  background: white;
-  border-bottom: 1px solid #e5eaf2;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -19,12 +20,13 @@
   display: flex;
   gap: 10px;
   align-items: center;
+  color: var(--text-primary);
 }
 
 .classroom-logo span {
   width: 34px;
   height: 34px;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   border-radius: 9px;
   display: flex;
@@ -35,20 +37,27 @@
 .classroom-nav-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 15px;
 }
 
 .teacher-name {
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
 .classroom-nav-right button {
   padding: 9px 16px;
-  background: white;
-  border: 1px solid #d5dce8;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
   border-radius: 8px;
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.classroom-nav-right button:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-color);
 }
 
 .classroom-content {
@@ -63,7 +72,7 @@
 }
 
 .classroom-heading p {
-  color: #2563eb;
+  color: var(--accent-color);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -72,6 +81,7 @@
 .classroom-heading h1 {
   margin-top: 7px;
   font-size: 30px;
+  color: var(--text-primary);
 }
 
 .live-indicator {
@@ -98,10 +108,11 @@
 .camera-card,
 .engagement-card,
 .emotion-card {
-  background: white;
-  border: 1px solid #e5eaf2;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 25px;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .camera-header,
@@ -114,7 +125,7 @@
 .camera-header small,
 .card-title small,
 .emotion-card small {
-  color: #8993a5;
+  color: var(--text-muted);
   font-size: 10px;
   font-weight: 700;
 }
@@ -124,14 +135,15 @@
 .emotion-card h2 {
   margin-top: 5px;
   font-size: 19px;
+  color: var(--text-primary);
 }
 
 .camera-status {
   font-size: 11px;
   padding: 7px 10px;
   border-radius: 20px;
-  background: #ecfdf3;
-  color: #16a34a;
+  background: rgba(22, 163, 74, 0.15);
+  color: #22c55e;
 }
 
 .camera-box {
@@ -163,14 +175,19 @@
   padding: 11px 20px;
   border: none;
   border-radius: 8px;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.camera-btn:hover {
+  background: var(--accent-hover);
 }
 
 .ai-badge {
-  background: #e8f0ff;
-  color: #2563eb;
+  background: var(--bg-status);
+  color: var(--accent-color);
   padding: 6px 9px;
   border-radius: 7px;
   font-size: 11px;
@@ -185,11 +202,11 @@
 .engagement-score strong {
   display: block;
   font-size: 55px;
-  color: #2563eb;
+  color: var(--accent-color);
 }
 
 .engagement-score span {
-  color: #7b8495;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
@@ -204,24 +221,25 @@
 }
 
 .metric span {
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .metric strong {
   font-size: 13px;
+  color: var(--text-primary);
 }
 
 .progress {
   height: 8px;
-  background: #e9edf4;
+  background: var(--progress-track);
   border-radius: 20px;
   overflow: hidden;
 }
 
 .progress div {
   height: 100%;
-  background: #2563eb;
+  background: var(--accent-color);
   border-radius: 20px;
 }
 
@@ -233,13 +251,14 @@
 }
 
 .classroom-stat {
-  background: white;
-  border: 1px solid #e5eaf2;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 20px;
   display: flex;
   gap: 14px;
   align-items: center;
+  box-shadow: 0 2px 8px var(--shadow-color);
 }
 
 .classroom-stat > span {
@@ -248,12 +267,13 @@
 
 .classroom-stat small {
   display: block;
-  color: #8993a5;
+  color: var(--text-muted);
   margin-bottom: 5px;
 }
 
 .classroom-stat strong {
   font-size: 22px;
+  color: var(--text-primary);
 }
 
 .emotion-card {
@@ -278,12 +298,13 @@
 
 .emotion-list p {
   font-size: 12px;
-  color: #667085;
+  color: var(--text-secondary);
   margin: 5px 0;
 }
 
 .emotion-list strong {
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .analytics-button {
@@ -292,10 +313,15 @@
   padding: 15px;
   border: none;
   border-radius: 9px;
-  background: #2563eb;
+  background: var(--accent-color);
   color: white;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.analytics-button:hover {
+  background: var(--accent-hover);
 }
 
 @media (max-width: 900px) {
@@ -331,11 +357,7 @@
   }
 }
 
- 
-
-/* =========================
-   LIVE CAMERA
-========================= */
+/* LIVE CAMERA */
 
 .camera-live {
   width: 100%;
@@ -354,14 +376,6 @@
   background: #050912;
 }
 
-/* Live indicator */
-.live-indicator {
-  color: #22c55e;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-/* Stop camera button */
 .stop-btn {
   position: absolute;
   bottom: 20px;

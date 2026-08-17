@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import ThemeToggle from "../components/ThemeToggle";
 import "./Analytics.css";
 
 function Analytics() {
@@ -13,9 +14,12 @@ function Analytics() {
           ClassroomAI
         </div>
 
-        <button onClick={() => navigate("/dashboard")}>
-          Dashboard
-        </button>
+        <div className="analytics-nav-right">
+          <ThemeToggle />
+          <button onClick={() => navigate("/dashboard")}>
+            Dashboard
+          </button>
+        </div>
       </header>
 
       <main className="analytics-content">
