@@ -149,3 +149,109 @@
     flex-direction: column;
   }
 }
+/* ========================================
+   FER EMOTION OVERLAY
+======================================== */
+
+.camera-live {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.camera-live video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* FER result box */
+
+.emotion-overlay {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+
+  min-width: 200px;
+
+  padding: 15px 18px;
+
+  border-radius: 14px;
+
+  background: rgba(10, 15, 30, 0.88);
+
+  backdrop-filter: blur(10px);
+
+  color: white;
+
+  z-index: 10;
+
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+/* Title */
+
+.emotion-title {
+  font-size: 11px;
+  font-weight: 600;
+
+  letter-spacing: 1px;
+
+  opacity: 0.7;
+
+  margin-bottom: 7px;
+}
+
+/* Emotion row */
+
+.emotion-main {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+/* Emoji */
+
+.emotion-emoji {
+  font-size: 25px;
+}
+
+/* Emotion */
+
+.emotion-value {
+  font-size: 24px;
+
+  font-weight: 700;
+
+  text-transform: capitalize;
+}
+
+/* Confidence */
+
+.emotion-confidence {
+  margin-top: 5px;
+
+  font-size: 13px;
+
+  opacity: 0.8;
+}
+
+/* ========================================
+   CAMERA BUTTON
+======================================== */
+
+.camera-live .stop-btn {
+  position: absolute;
+
+  bottom: 25px;
+
+  left: 50%;
+
+  transform: translateX(-50%);
+
+  z-index: 10;
+}

@@ -6,21 +6,37 @@ import "./Classroom.css";
 function Classroom() {
   const navigate = useNavigate();
 
+  // =========================
+  // CAMERA
+  // =========================
+
   const videoRef = useRef(null);
 
   const [cameraOn, setCameraOn] = useState(false);
   const [stream, setStream] = useState(null);
 
-  // Start camera
+  // =========================
+  // FER EMOTION
+  // =========================
+
+  const [emotion, setEmotion] = useState("Waiting...");
+  const [emotionConfidence, setEmotionConfidence] = useState(0);
+
+  // =========================
+  // START CAMERA
+  // =========================
+
   const startCamera = async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
+      const mediaStream =
+        await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
 
       setStream(mediaStream);
       setCameraOn(true);
+
     } catch (error) {
       console.error("Camera access failed:", error);
 
@@ -30,14 +46,142 @@ function Classroom() {
     }
   };
 
-  // Attach stream after video element appears
+  // =========================
+  // FER ANALYSIS
+  // =========================
+
+  const analyzeEmotion = async () => {
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+
+    // Camera not ready yet
+    if (video.readyState < 2) return;
+
+    // Make canvas
+    const canvas = document.createElement("canvas");
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) return;
+
+    // Capture current video frame
+    ctx.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    // Convert frame to image
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) return;
+
+        const formData = new FormData();
+
+        formData.append(
+          "image",
+          blob,
+          "frame.jpg"
+        );
+
+        try {
+          const response = await fetch(
+            "http://127.0.0.1:5000/predict-emotion",
+            {
+              method: "POST",
+              body: formData,
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(
+              `Server error: ${response.status}`
+            );
+          }
+
+          const data = await response.json();
+
+          console.log("FER Response:", data);
+
+          // =========================
+          // FACE DETECTED
+          // =========================
+
+          if (
+            data.success &&
+            data.faces_detected > 0 &&
+            data.faces &&
+            data.faces.length > 0
+          ) {
+            const face = data.faces[0];
+
+            setEmotion(
+              face.emotion || "Unknown"
+            );
+
+            setEmotionConfidence(
+              Number(face.confidence) || 0
+            );
+
+          } else {
+
+            // No face detected
+            setEmotion("No face");
+            setEmotionConfidence(0);
+          }
+
+        } catch (error) {
+
+          console.error(
+            "FER connection error:",
+            error
+          );
+
+          setEmotion("Connection error");
+          setEmotionConfidence(0);
+        }
+      },
+      "image/jpeg",
+      0.8
+    );
+  };
+
+  // =========================
+  // ATTACH STREAM TO VIDEO
+  // =========================
+
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
   }, [stream]);
 
-  // Stop camera
+  // =========================
+  // RUN FER EVERY 1.5 SECONDS
+  // =========================
+
+  useEffect(() => {
+    if (!cameraOn) return;
+
+    const interval = setInterval(() => {
+      analyzeEmotion();
+    }, 1500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [cameraOn]);
+
+  // =========================
+  // STOP CAMERA
+  // =========================
+
   const stopCamera = () => {
     if (stream) {
       stream.getTracks().forEach((track) => {
@@ -51,9 +195,16 @@ function Classroom() {
 
     setStream(null);
     setCameraOn(false);
+
+    // Reset FER
+    setEmotion("Waiting...");
+    setEmotionConfidence(0);
   };
 
-  // Stop camera when leaving page
+  // =========================
+  // CLEANUP WHEN LEAVING PAGE
+  // =========================
+
   useEffect(() => {
     return () => {
       if (stream) {
@@ -64,10 +215,49 @@ function Classroom() {
     };
   }, [stream]);
 
+  // =========================
+  // EMOTION EMOJI
+  // =========================
+
+  const getEmotionEmoji = () => {
+    switch (emotion?.toLowerCase()) {
+      case "happy":
+        return "😊";
+
+      case "sad":
+        return "😢";
+
+      case "angry":
+        return "😠";
+
+      case "fear":
+        return "😨";
+
+      case "disgust":
+        return "🤢";
+
+      case "surprise":
+        return "😮";
+
+      case "neutral":
+        return "😐";
+
+      default:
+        return "🤖";
+    }
+  };
+
+  // =========================
+  // RETURN UI
+  // =========================
+
   return (
     <div className="classroom-page">
 
-      {/* NAVBAR */}
+      {/* =========================
+          NAVBAR
+      ========================= */}
+
       <nav className="classroom-nav">
 
         <div className="classroom-logo">
@@ -83,7 +273,11 @@ function Classroom() {
             Teacher
           </span>
 
-          <button onClick={() => navigate("/dashboard")}>
+          <button
+            onClick={() =>
+              navigate("/dashboard")
+            }
+          >
             Dashboard
           </button>
 
@@ -91,11 +285,16 @@ function Classroom() {
 
       </nav>
 
+      {/* =========================
+          MAIN CONTENT
+      ========================= */}
 
-      {/* MAIN CONTENT */}
       <main className="classroom-content">
 
-        {/* PAGE HEADING */}
+        {/* =========================
+            PAGE HEADING
+        ========================= */}
+
         <div className="classroom-heading">
 
           <div>
@@ -105,7 +304,6 @@ function Classroom() {
               Computer Science — AI
             </h1>
           </div>
-
 
           <div className="live-indicator">
 
@@ -122,12 +320,16 @@ function Classroom() {
 
         </div>
 
+        {/* =========================
+            CAMERA + ENGAGEMENT
+        ========================= */}
 
-        {/* CAMERA + ENGAGEMENT */}
         <div className="classroom-grid">
 
+          {/* =========================
+              CAMERA CARD
+          ========================= */}
 
-          {/* CAMERA CARD */}
           <section className="camera-card">
 
             <div className="camera-header">
@@ -144,7 +346,6 @@ function Classroom() {
 
               </div>
 
-
               <span className="camera-status">
 
                 {cameraOn
@@ -155,13 +356,15 @@ function Classroom() {
 
             </div>
 
-
             {/* CAMERA BOX */}
+
             <div className="camera-box">
 
               {cameraOn ? (
 
                 <div className="camera-live">
+
+                  {/* VIDEO */}
 
                   <video
                     ref={videoRef}
@@ -169,6 +372,42 @@ function Classroom() {
                     playsInline
                     muted
                   />
+
+                  {/* =========================
+                      FER EMOTION OVERLAY
+                  ========================= */}
+
+                  <div className="emotion-overlay">
+
+                    <div className="emotion-title">
+                      AI EMOTION DETECTION
+                    </div>
+
+                    <div className="emotion-main">
+
+                      <span className="emotion-emoji">
+                        {getEmotionEmoji()}
+                      </span>
+
+                      <span className="emotion-value">
+                        {emotion}
+                      </span>
+
+                    </div>
+
+                    <div className="emotion-confidence">
+
+                      Confidence:{" "}
+                      {Number(
+                        emotionConfidence
+                      ).toFixed(1)}
+                      %
+
+                    </div>
+
+                  </div>
+
+                  {/* STOP CAMERA */}
 
                   <button
                     className="camera-btn stop-btn"
@@ -192,7 +431,8 @@ function Classroom() {
                   </h3>
 
                   <p>
-                    Start the camera to begin classroom monitoring.
+                    Start the camera to begin
+                    classroom monitoring.
                   </p>
 
                   <button
@@ -210,8 +450,10 @@ function Classroom() {
 
           </section>
 
+          {/* =========================
+              ENGAGEMENT CARD
+          ========================= */}
 
-          {/* ENGAGEMENT CARD */}
           <section className="engagement-card">
 
             <div className="card-title">
@@ -234,8 +476,8 @@ function Classroom() {
 
             </div>
 
-
             {/* SCORE */}
+
             <div className="engagement-score">
 
               <strong>
@@ -248,8 +490,8 @@ function Classroom() {
 
             </div>
 
-
             {/* ATTENTION */}
+
             <div className="metric">
 
               <div>
@@ -276,8 +518,8 @@ function Classroom() {
 
             </div>
 
-
             {/* PARTICIPATION */}
+
             <div className="metric">
 
               <div>
@@ -304,8 +546,8 @@ function Classroom() {
 
             </div>
 
-
             {/* POSITIVE MOOD */}
+
             <div className="metric">
 
               <div>
@@ -336,10 +578,11 @@ function Classroom() {
 
         </div>
 
+        {/* =========================
+            STUDENT STATISTICS
+        ========================= */}
 
-        {/* STUDENT STATISTICS */}
         <section className="classroom-stats">
-
 
           <div className="classroom-stat">
 
@@ -361,7 +604,6 @@ function Classroom() {
 
           </div>
 
-
           <div className="classroom-stat">
 
             <span>
@@ -381,7 +623,6 @@ function Classroom() {
             </div>
 
           </div>
-
 
           <div className="classroom-stat">
 
@@ -403,7 +644,6 @@ function Classroom() {
 
           </div>
 
-
           <div className="classroom-stat">
 
             <span>
@@ -424,13 +664,13 @@ function Classroom() {
 
           </div>
 
-
         </section>
 
+        {/* =========================
+            CLASSROOM EMOTIONS
+        ========================= */}
 
-        {/* EMOTION CARD */}
         <section className="emotion-card">
-
 
           <div>
 
@@ -444,9 +684,7 @@ function Classroom() {
 
           </div>
 
-
           <div className="emotion-list">
-
 
             <div>
 
@@ -464,7 +702,6 @@ function Classroom() {
 
             </div>
 
-
             <div>
 
               <span>
@@ -480,7 +717,6 @@ function Classroom() {
               </strong>
 
             </div>
-
 
             <div>
 
@@ -498,7 +734,6 @@ function Classroom() {
 
             </div>
 
-
             <div>
 
               <span>
@@ -515,20 +750,22 @@ function Classroom() {
 
             </div>
 
-
           </div>
 
         </section>
 
+        {/* =========================
+            ANALYTICS BUTTON
+        ========================= */}
 
-        {/* ANALYTICS BUTTON */}
         <button
           className="analytics-button"
-          onClick={() => navigate("/analytics")}
+          onClick={() =>
+            navigate("/analytics")
+          }
         >
           View Detailed Analytics →
         </button>
-
 
       </main>
 

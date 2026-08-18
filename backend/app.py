@@ -2,6 +2,11 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
 
+import os
+import cv2
+import numpy as np
+import tensorflow as tf
+
 app = Flask(__name__)
 CORS(app)
 
@@ -10,8 +15,49 @@ client = MongoClient("mongodb://127.0.0.1:27017/")
 db = client["classroom_engagement"]
 users = db["users"]
 
-print("MongoDB connected successfully!")
 
+print("MongoDB connected successfully!")
+# =========================
+# LOAD FER EMOTION MODEL
+# =========================
+
+BASE_DIR = os.path.dirname(
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
+)
+
+MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "ai-model",
+    "emotion",
+    "emotion_model.keras"
+)
+
+print("Loading emotion model...")
+
+emotion_model = tf.keras.models.load_model(
+    MODEL_PATH
+)
+
+print("Emotion model loaded successfully!")
+
+# Emotion labels
+emotion_labels = [
+    "Angry",
+    "Disgust",
+    "Fear",
+    "Happy",
+    "Sad",
+    "Surprise",
+    "Neutral"
+]
+
+# Face detector
+face_detector = cv2.CascadeClassifier(
+    cv2.data.haarcascades +
+    "haarcascade_frontalface_default.xml"
+)
 
 @app.route("/")
 def home():
@@ -54,6 +100,7 @@ def login():
 
     email = data.get("email")
     password = data.get("password")
+    
 
     if not email or not password:
         return jsonify({
@@ -76,7 +123,132 @@ def login():
         "success": False,
         "message": "Invalid email or password"
     }), 401
+@app.route("/predict-emotion", methods=["POST"])
+def predict_emotion():
+
+    try:
+        # Check if image was received
+        if "image" not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "No image received"
+            }), 400
+
+        image_file = request.files["image"]
+
+        # Read image
+        image_bytes = image_file.read()
+
+        image_array = np.frombuffer(
+            image_bytes,
+            np.uint8
+        )
+
+        frame = cv2.imdecode(
+            image_array,
+            cv2.IMREAD_COLOR
+        )
+
+        if frame is None:
+            return jsonify({
+                "success": False,
+                "message": "Invalid image"
+            }), 400
+
+        # Convert to grayscale
+        gray = cv2.cvtColor(
+            frame,
+            cv2.COLOR_BGR2GRAY
+        )
+
+        # Detect faces
+        faces = face_detector.detectMultiScale(
+            gray,
+            scaleFactor=1.3,
+            minNeighbors=5,
+            minSize=(50, 50)
+        )
+
+        results = []
+
+        for (x, y, w, h) in faces:
+
+            # Extract face
+            face = gray[
+                y:y + h,
+                x:x + w
+            ]
+
+            # Resize to model input
+            face = cv2.resize(
+                face,
+                (48, 48)
+            )
+
+            # Normalize
+            face = face.astype(
+                "float32"
+            ) / 255.0
+
+            # Reshape
+            face = np.expand_dims(
+                face,
+                axis=0
+            )
+
+            face = np.expand_dims(
+                face,
+                axis=-1
+            )
+
+            # Predict emotion
+            predictions = emotion_model.predict(
+                face,
+                verbose=0
+            )
+
+            emotion_index = np.argmax(
+                predictions[0]
+            )
+
+            emotion = emotion_labels[
+                emotion_index
+            ]
+
+            confidence = (
+                float(
+                    predictions[0][emotion_index]
+                ) * 100
+            )
+
+            results.append({
+                "emotion": emotion,
+                "confidence": round(
+                    confidence,
+                    2
+                ),
+                "x": int(x),
+                "y": int(y),
+                "width": int(w),
+                "height": int(h)
+            })
+
+        return jsonify({
+            "success": True,
+            "faces": results,
+            "faces_detected": len(results)
+        })
+
+    except Exception as e:
+
+        print("FER ERROR:", e)
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+    
