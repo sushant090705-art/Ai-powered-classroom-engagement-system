@@ -10,11 +10,11 @@ import tensorflow as tf
 app = Flask(__name__)
 CORS(app)
 
-# MongoDB connection
-client = MongoClient("mongodb://127.0.0.1:27017/")
+# MongoDB Atlas connection
+client = MongoClient("mongodb+srv://suryamsaini3_db_user:DziKLc2JFeoaX4dK@cluster0.yfd6kld.mongodb.net/?appName=Cluster0")
+
 db = client["classroom_engagement"]
 users = db["users"]
-
 
 print("MongoDB connected successfully!")
 # =========================
