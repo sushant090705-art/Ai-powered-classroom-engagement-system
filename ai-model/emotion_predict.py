@@ -51,7 +51,7 @@ face_detector = cv2.CascadeClassifier(
 # START WEBCAM
 # =========================
 
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture("http://192.168.43.1:8080/video")
 
 if not cap.isOpened():
     print("ERROR: Could not open webcam.")
@@ -67,7 +67,7 @@ while True:
     if not ret:
         print("ERROR: Could not read webcam frame.")
         break
-    frame = cv2.flip(frame, -1)
+    frame = cv2.flip(frame, 1)
 
     # Convert frame to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

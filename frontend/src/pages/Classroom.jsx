@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ThemeToggle from "../components/ThemeToggle";
 import "./Classroom.css";
 
@@ -7,115 +7,144 @@ function Classroom() {
   const navigate = useNavigate();
 
   // =========================
+  // BACKEND
+  // =========================
+
+  const BACKEND_URL = "http://127.0.0.1:5000";
+
+  // =========================
   // CAMERA
   // =========================
 
-  const videoRef = useRef(null);
-
+  const [cameraUrl, setCameraUrl] = useState("");
+  const [cameraConnected, setCameraConnected] = useState(false);
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [cameraError, setCameraError] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
-  const [stream, setStream] = useState(null);
 
   // =========================
-  // FER EMOTION
+  // EMOTION
   // =========================
 
   const [emotion, setEmotion] = useState("Waiting...");
   const [emotionConfidence, setEmotionConfidence] = useState(0);
+  const [facesDetected, setFacesDetected] = useState(0);
 
   // =========================
-  // START CAMERA
+  // CONNECT CAMERA
   // =========================
 
-  const startCamera = async () => {
+  const connectCamera = async () => {
+    if (!cameraUrl.trim()) {
+      setCameraError("Please enter camera URL");
+      return;
+    }
+
+    setCameraLoading(true);
+    setCameraError("");
+
     try {
-      const mediaStream =
-        await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false,
-        });
+      const response = await fetch(
+        `${BACKEND_URL}/camera/connect`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+           url: `http://${cameraUrl.trim()}:8080/video`
+          }),
+        }
+      );
 
-      setStream(mediaStream);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || "Failed to connect camera"
+        );
+      }
+
+      setCameraConnected(true);
       setCameraOn(true);
 
     } catch (error) {
-      console.error("Camera access failed:", error);
+      console.error("Camera connection error:", error);
 
-      alert(
-        "Unable to access camera. Please allow camera permission and try again."
+      setCameraConnected(false);
+      setCameraOn(false);
+
+      setCameraError(
+        error.message || "Unable to connect camera"
       );
+
+    } finally {
+      setCameraLoading(false);
     }
   };
 
   // =========================
-  // FER ANALYSIS
+  // DISCONNECT CAMERA
   // =========================
 
-  const analyzeEmotion = async () => {
-    if (!videoRef.current) return;
+  const disconnectCamera = async () => {
+    try {
+      await fetch(
+        `${BACKEND_URL}/camera/disconnect`,
+        {
+          method: "POST",
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Camera disconnect error:",
+        error
+      );
+    }
 
-    const video = videoRef.current;
+    setCameraConnected(false);
+    setCameraOn(false);
 
-    // Camera not ready yet
-    if (video.readyState < 2) return;
+    setEmotion("Waiting...");
+    setEmotionConfidence(0);
+    setFacesDetected(0);
+  };
 
-    // Make canvas
-    const canvas = document.createElement("canvas");
+  // =========================
+  // STOP CAMERA
+  // =========================
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+  const stopCamera = async () => {
+    await disconnectCamera();
+  };
 
-    const ctx = canvas.getContext("2d");
+  // =========================
+  // GET EMOTION RESULTS
+  // =========================
 
-    if (!ctx) return;
+  useEffect(() => {
+    if (!cameraOn) return;
 
-    // Capture current video frame
-    ctx.drawImage(
-      video,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    // Convert frame to image
-    canvas.toBlob(
-      async (blob) => {
-        if (!blob) return;
-
-        const formData = new FormData();
-
-        formData.append(
-          "image",
-          blob,
-          "frame.jpg"
+    const getEmotionResults = async () => {
+      try {
+        const response = await fetch(
+          `${BACKEND_URL}/emotion-results`
         );
 
-        try {
-          const response = await fetch(
-            "http://127.0.0.1:5000/predict-emotion",
-            {
-              method: "POST",
-              body: formData,
-            }
+        if (!response.ok) {
+          throw new Error(
+            `Server error: ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+          setFacesDetected(
+            data.faces_detected || 0
           );
 
-          if (!response.ok) {
-            throw new Error(
-              `Server error: ${response.status}`
-            );
-          }
-
-          const data = await response.json();
-
-          console.log("FER Response:", data);
-
-          // =========================
-          // FACE DETECTED
-          // =========================
-
           if (
-            data.success &&
-            data.faces_detected > 0 &&
             data.faces &&
             data.faces.length > 0
           ) {
@@ -128,99 +157,45 @@ function Classroom() {
             setEmotionConfidence(
               Number(face.confidence) || 0
             );
-
           } else {
-
-            // No face detected
             setEmotion("No face");
             setEmotionConfidence(0);
           }
-
-        } catch (error) {
-
-          console.error(
-            "FER connection error:",
-            error
-          );
-
-          setEmotion("Connection error");
-          setEmotionConfidence(0);
         }
-      },
-      "image/jpeg",
-      0.8
+
+      } catch (error) {
+        console.error(
+          "Emotion results error:",
+          error
+        );
+
+        setEmotion("Connection error");
+        setEmotionConfidence(0);
+      }
+    };
+
+    getEmotionResults();
+
+    const interval = setInterval(
+      getEmotionResults,
+      1000
     );
-  };
-
-  // =========================
-  // ATTACH STREAM TO VIDEO
-  // =========================
-
-  useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-    }
-  }, [stream]);
-
-  // =========================
-  // RUN FER EVERY 1.5 SECONDS
-  // =========================
-
-  useEffect(() => {
-    if (!cameraOn) return;
-
-    const interval = setInterval(() => {
-      analyzeEmotion();
-    }, 1500);
 
     return () => {
       clearInterval(interval);
     };
+
   }, [cameraOn]);
 
-  // =========================
-  // STOP CAMERA
-  // =========================
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => {
-        track.stop();
-      });
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    setStream(null);
-    setCameraOn(false);
-
-    // Reset FER
-    setEmotion("Waiting...");
-    setEmotionConfidence(0);
-  };
-
-  // =========================
-  // CLEANUP WHEN LEAVING PAGE
-  // =========================
-
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => {
-          track.stop();
-        });
-      }
-    };
-  }, [stream]);
 
   // =========================
   // EMOTION EMOJI
   // =========================
 
   const getEmotionEmoji = () => {
+
     switch (emotion?.toLowerCase()) {
+
       case "happy":
         return "😊";
 
@@ -246,6 +221,7 @@ function Classroom() {
         return "🤖";
     }
   };
+
 
   // =========================
   // RETURN UI
@@ -285,6 +261,7 @@ function Classroom() {
 
       </nav>
 
+
       {/* =========================
           MAIN CONTENT
       ========================= */}
@@ -298,11 +275,15 @@ function Classroom() {
         <div className="classroom-heading">
 
           <div>
-            <p>LIVE CLASSROOM</p>
+
+            <p>
+              LIVE CLASSROOM
+            </p>
 
             <h1>
               Computer Science — AI
             </h1>
+
           </div>
 
           <div className="live-indicator">
@@ -320,11 +301,78 @@ function Classroom() {
 
         </div>
 
+
+        {/* =========================
+            CAMERA CONNECTION
+        ========================= */}
+
+        <section className="camera-connection-panel">
+
+          <h3>
+            Connect Classroom Camera
+          </h3>
+
+          <p>
+            Start IP Webcam on your phone and enter
+            the camera video URL below.
+          </p>
+
+          <div className="camera-url-row">
+
+            <input
+              type="text"
+              value={cameraUrl}
+              onChange={(e) =>
+                setCameraUrl(e.target.value)
+              }
+               placeholder="Enter camera IP (e.g. 192.168.43.1)"
+              disabled={cameraLoading || cameraConnected}
+            />
+
+            {!cameraConnected ? (
+
+              <button
+                onClick={connectCamera}
+                disabled={cameraLoading}
+              >
+                {cameraLoading
+                  ? "Connecting..."
+                  : "Connect Camera"}
+              </button>
+
+            ) : (
+
+              <button
+                onClick={disconnectCamera}
+              >
+                Disconnect
+              </button>
+
+            )}
+
+          </div>
+
+          {cameraError && (
+            <p className="camera-error">
+              {cameraError}
+            </p>
+          )}
+
+          {cameraConnected && (
+            <p className="camera-success">
+              ✓ Camera connected
+            </p>
+          )}
+
+        </section>
+
+
         {/* =========================
             CAMERA + ENGAGEMENT
         ========================= */}
 
         <div className="classroom-grid">
+
 
           {/* =========================
               CAMERA CARD
@@ -349,12 +397,13 @@ function Classroom() {
               <span className="camera-status">
 
                 {cameraOn
-                  ? "Camera Active"
+                  ? "Mobile Camera Active"
                   : "Camera Ready"}
 
               </span>
 
             </div>
+
 
             {/* CAMERA BOX */}
 
@@ -364,14 +413,12 @@ function Classroom() {
 
                 <div className="camera-live">
 
-                  {/* VIDEO */}
-
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
+                  <img
+                    src={`${BACKEND_URL}/video_feed`}
+                    alt="Live classroom camera"
+                    className="classroom-video"
                   />
+
 
                   {/* =========================
                       FER EMOTION OVERLAY
@@ -398,14 +445,25 @@ function Classroom() {
                     <div className="emotion-confidence">
 
                       Confidence:{" "}
+
                       {Number(
                         emotionConfidence
                       ).toFixed(1)}
+
                       %
 
                     </div>
 
+                    <div className="emotion-confidence">
+
+                      Faces Detected:{" "}
+
+                      {facesDetected}
+
+                    </div>
+
                   </div>
+
 
                   {/* STOP CAMERA */}
 
@@ -423,24 +481,17 @@ function Classroom() {
                 <div className="camera-placeholder">
 
                   <div className="camera-icon">
-                    📷
+                    📱
                   </div>
 
                   <h3>
-                    Camera Preview
+                    Mobile Camera
                   </h3>
 
                   <p>
-                    Start the camera to begin
-                    classroom monitoring.
+                    Connect your mobile camera above
+                    to begin classroom monitoring.
                   </p>
-
-                  <button
-                    className="camera-btn"
-                    onClick={startCamera}
-                  >
-                    Start Camera
-                  </button>
 
                 </div>
 
@@ -449,6 +500,7 @@ function Classroom() {
             </div>
 
           </section>
+
 
           {/* =========================
               ENGAGEMENT CARD
@@ -476,6 +528,7 @@ function Classroom() {
 
             </div>
 
+
             {/* SCORE */}
 
             <div className="engagement-score">
@@ -489,6 +542,7 @@ function Classroom() {
               </span>
 
             </div>
+
 
             {/* ATTENTION */}
 
@@ -518,6 +572,7 @@ function Classroom() {
 
             </div>
 
+
             {/* PARTICIPATION */}
 
             <div className="metric">
@@ -545,6 +600,7 @@ function Classroom() {
               </div>
 
             </div>
+
 
             {/* POSITIVE MOOD */}
 
@@ -578,6 +634,7 @@ function Classroom() {
 
         </div>
 
+
         {/* =========================
             STUDENT STATISTICS
         ========================= */}
@@ -597,12 +654,13 @@ function Classroom() {
               </small>
 
               <strong>
-                32
+                {facesDetected}
               </strong>
 
             </div>
 
           </div>
+
 
           <div className="classroom-stat">
 
@@ -617,12 +675,13 @@ function Classroom() {
               </small>
 
               <strong>
-                26
+                --
               </strong>
 
             </div>
 
           </div>
+
 
           <div className="classroom-stat">
 
@@ -637,12 +696,13 @@ function Classroom() {
               </small>
 
               <strong>
-                22
+                --
               </strong>
 
             </div>
 
           </div>
+
 
           <div className="classroom-stat">
 
@@ -657,7 +717,7 @@ function Classroom() {
               </small>
 
               <strong>
-                4
+                --
               </strong>
 
             </div>
@@ -665,6 +725,7 @@ function Classroom() {
           </div>
 
         </section>
+
 
         {/* =========================
             CLASSROOM EMOTIONS
@@ -689,15 +750,15 @@ function Classroom() {
             <div>
 
               <span>
-                😊
+                {getEmotionEmoji()}
               </span>
 
               <p>
-                Positive
+                Current
               </p>
 
               <strong>
-                74%
+                {emotion}
               </strong>
 
             </div>
@@ -705,15 +766,17 @@ function Classroom() {
             <div>
 
               <span>
-                😐
+                🎯
               </span>
 
               <p>
-                Neutral
+                Confidence
               </p>
 
               <strong>
-                18%
+                {Number(
+                  emotionConfidence
+                ).toFixed(1)}%
               </strong>
 
             </div>
@@ -721,31 +784,15 @@ function Classroom() {
             <div>
 
               <span>
-                😕
+                👥
               </span>
 
               <p>
-                Confused
+                Faces
               </p>
 
               <strong>
-                6%
-              </strong>
-
-            </div>
-
-            <div>
-
-              <span>
-                😴
-              </span>
-
-              <p>
-                Disengaged
-              </p>
-
-              <strong>
-                2%
+                {facesDetected}
               </strong>
 
             </div>
@@ -753,6 +800,7 @@ function Classroom() {
           </div>
 
         </section>
+
 
         {/* =========================
             ANALYTICS BUTTON
