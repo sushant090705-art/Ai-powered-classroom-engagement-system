@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 import threading
 import time
-
+from ultralytics import YOLO
 
 # ============================================================
 # FLASK APP
@@ -53,6 +53,22 @@ camera_lock = threading.Lock()
 latest_results = []
 
 results_lock = threading.Lock()
+
+
+# ============================================================
+# LOAD YOLO MODEL
+# ============================================================
+
+print("Loading YOLO model...")
+
+yolo_model = YOLO(
+    os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "yolov8n.pt"
+    )
+)
+
+print("YOLO model loaded successfully!")
 
 # ============================================================
 # LOAD EMOTION MODEL
@@ -247,123 +263,212 @@ def predict_emotion():
 # ============================================================
 # PROCESS FRAME
 # ============================================================
-
 def process_frame(frame):
 
     global latest_results
 
-    # Convert to grayscale
-    gray = cv2.cvtColor(
-        frame,
-        cv2.COLOR_BGR2GRAY
-    )
-
-    # Detect faces
-    faces = face_detector.detectMultiScale(
-        gray,
-        scaleFactor=1.3,
-        minNeighbors=5,
-        minSize=(50, 50)
-    )
-
     results = []
 
-    for (x, y, w, h) in faces:
+    # -----------------------------------
+    # 1. YOLO: Detect persons
+    # -----------------------------------
 
-        # Extract face
-        face = gray[
-            y:y + h,
-            x:x + w
+    yolo_results = yolo_model(
+        frame,
+        classes=[0],
+        conf=0.40,
+        verbose=False
+    )
+
+    # -----------------------------------
+    # 2. Process each detected person
+    # -----------------------------------
+
+    for box in yolo_results[0].boxes:
+
+        x1, y1, x2, y2 = map(
+            int,
+            box.xyxy[0].tolist()
+        )
+
+        # Keep coordinates inside frame
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(frame.shape[1], x2)
+        y2 = min(frame.shape[0], y2)
+
+        # Crop person
+        person_crop = frame[
+            y1:y2,
+            x1:x2
         ]
 
-        # Resize
-        face = cv2.resize(
-            face,
-            (48, 48)
+        if person_crop.size == 0:
+            continue
+
+        # -----------------------------------
+        # 3. Haar: Detect face inside person
+        # -----------------------------------
+
+        gray_person = cv2.cvtColor(
+            person_crop,
+            cv2.COLOR_BGR2GRAY
         )
 
-        # Normalize
-        face = face.astype(
-            "float32"
-        ) / 255.0
-
-        # Reshape
-        face = np.expand_dims(
-            face,
-            axis=0
+        faces = face_detector.detectMultiScale(
+            gray_person,
+            scaleFactor=1.3,
+            minNeighbors=5,
+            minSize=(50, 50)
         )
 
-        face = np.expand_dims(
-            face,
-            axis=-1
-        )
+        # -----------------------------------
+        # 4. Process each face
+        # -----------------------------------
 
-        # Predict
-        predictions = emotion_model.predict(
-            face,
-            verbose=0
-        )
+        for (fx, fy, fw, fh) in faces:
 
-        emotion_index = np.argmax(
-            predictions[0]
-        )
+            face = gray_person[
+                fy:fy + fh,
+                fx:fx + fw
+            ]
 
-        emotion = emotion_labels[
-            emotion_index
-        ]
+            if face.size == 0:
+                continue
 
-        confidence = (
-            float(
-                predictions[0][emotion_index]
-            ) * 100
-        )
+            # Resize
+            face = cv2.resize(
+                face,
+                (48, 48)
+            )
 
-        result = {
-            "emotion": emotion,
-            "confidence": round(
-                confidence,
+            # Normalize
+            face = face.astype(
+                "float32"
+            ) / 255.0
+
+            # Reshape
+            face = np.expand_dims(
+                face,
+                axis=0
+            )
+
+            face = np.expand_dims(
+                face,
+                axis=-1
+            )
+
+            # -----------------------------------
+            # 5. Emotion prediction
+            # -----------------------------------
+
+            predictions = emotion_model.predict(
+                face,
+                verbose=0
+            )
+
+            emotion_index = np.argmax(
+                predictions[0]
+            )
+
+            emotion = emotion_labels[
+                emotion_index
+            ]
+
+            confidence = (
+                float(
+                    predictions[0][emotion_index]
+                ) * 100
+            )
+
+            # Convert face coordinates
+            # back to original frame
+            face_x = x1 + fx
+            face_y = y1 + fy
+
+            # -----------------------------------
+            # 6. Store result
+            # -----------------------------------
+
+            result = {
+                "emotion": emotion,
+                "confidence": round(
+                    confidence,
+                    2
+                ),
+                "x": int(face_x),
+                "y": int(face_y),
+                "width": int(fw),
+                "height": int(fh),
+
+                # YOLO person coordinates
+                "person_x": int(x1),
+                "person_y": int(y1),
+                "person_width": int(x2 - x1),
+                "person_height": int(y2 - y1)
+            }
+
+            results.append(result)
+
+            # -----------------------------------
+            # 7. Draw face rectangle
+            # -----------------------------------
+
+            cv2.rectangle(
+                frame,
+                (face_x, face_y),
+                (face_x + fw, face_y + fh),
+                (0, 255, 0),
                 2
-            ),
-            "x": int(x),
-            "y": int(y),
-            "width": int(w),
-            "height": int(h)
-        }
+            )
 
-        results.append(result)
+            # Display emotion
+            text = (
+                f"{emotion}: "
+                f"{confidence:.1f}%"
+            )
 
-        # Draw face rectangle
+            cv2.putText(
+                frame,
+                text,
+                (face_x, max(face_y - 10, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2
+            )
+
+        # -----------------------------------
+        # 8. Draw YOLO person rectangle
+        # -----------------------------------
+
         cv2.rectangle(
             frame,
-            (x, y),
-            (x + w, y + h),
-            (0, 255, 0),
+            (x1, y1),
+            (x2, y2),
+            (255, 0, 0),
             2
-        )
-
-        # Display emotion
-        text = (
-            f"{emotion}: "
-            f"{confidence:.1f}%"
         )
 
         cv2.putText(
             frame,
-            text,
-            (x, y - 10),
+            "Person",
+            (x1, max(y1 - 10, 20)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (0, 255, 0),
+            0.7,
+            (255, 0, 0),
             2
         )
 
-    # Save latest results
+    # -----------------------------------
+    # 9. Save latest results
+    # -----------------------------------
+
     with results_lock:
 
         latest_results = results
 
     return results
-
 
 # ============================================================
 # MOBILE CAMERA CONNECTION
