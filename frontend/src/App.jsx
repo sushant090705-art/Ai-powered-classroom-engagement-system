@@ -7,6 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Classroom from "./pages/Classroom";
 import Analytics from "./pages/Analytics";
 import Register from "./pages/Register";
+import RecordedVideo from "./pages/RecordedVideo";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/classroom" element={<Classroom />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/recorded-video" element={<RecordedVideo />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

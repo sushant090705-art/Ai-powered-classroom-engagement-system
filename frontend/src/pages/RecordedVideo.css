@@ -1,0 +1,265 @@
+/* Main page */
+.recorded-video-page {
+  min-height: 100vh;
+  padding: 40px 20px;
+  background: linear-gradient(135deg, #eef4ff, #f8fbff);
+}
+
+/* Main container */
+.recorded-video-container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px;
+  background: #ffffff;
+  border: 1px solid #e1e8f5;
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(30, 70, 130, 0.12);
+}
+
+/* Heading */
+.recorded-video-container h1 {
+  margin-bottom: 12px;
+  color: #173b75;
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Description */
+.page-description {
+  margin-bottom: 30px;
+  color: #667085;
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* Upload section */
+.upload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 25px;
+}
+
+.upload-label {
+  color: #243b64;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.upload-section input[type="file"] {
+  width: 100%;
+  padding: 14px;
+  color: #344054;
+  background: #f8faff;
+  border: 2px dashed #8ba9dc;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.upload-section input[type="file"]:hover {
+  background: #eef5ff;
+  border-color: #3569c8;
+}
+
+/* Video preview */
+.video-preview-section {
+  margin-top: 25px;
+  text-align: center;
+}
+
+.recorded-video-player {
+  display: block;
+  width: 100%;
+  max-height: 500px;
+  background: #101828;
+  border-radius: 14px;
+  object-fit: contain;
+}
+
+.video-name {
+  margin: 15px 0;
+  color: #475467;
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+/* Buttons */
+.video-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+}
+
+.video-actions button {
+  min-width: 160px;
+  padding: 13px 22px;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.remove-video-button {
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca !important;
+}
+
+.remove-video-button:hover {
+  background: #fee4e2;
+  transform: translateY(-2px);
+}
+
+.analyze-video-button {
+  color: #ffffff;
+  background: #245dcc;
+}
+
+.analyze-video-button:hover {
+  background: #1747a1;
+  transform: translateY(-2px);
+}
+
+.video-actions button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Loading message */
+.loading-message {
+  margin-top: 25px;
+  padding: 18px;
+  color: #1747a1;
+  background: #eef4ff;
+  border: 1px solid #b9d0ff;
+  border-radius: 12px;
+  text-align: center;
+}
+
+/* Error message */
+.error-message {
+  margin-top: 25px;
+  padding: 15px;
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Analysis result */
+.analysis-result {
+  margin-top: 35px;
+  padding: 25px;
+  background: #f8faff;
+  border: 1px solid #d9e5fa;
+  border-radius: 16px;
+}
+
+.analysis-result h2 {
+  margin-bottom: 22px;
+  color: #173b75;
+  font-size: 25px;
+  text-align: center;
+}
+
+.analysis-result h3 {
+  margin-top: 25px;
+  margin-bottom: 12px;
+  color: #243b64;
+  font-size: 19px;
+}
+
+/* Result rows */
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e1e8f5;
+  color: #344054;
+}
+
+.result-item strong {
+  color: #243b64;
+}
+
+.result-item span {
+  color: #475467;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Emotion list */
+.emotion-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.emotion-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 12px 15px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  border: 1px solid #e1e8f5;
+  border-radius: 8px;
+  color: #344054;
+}
+
+.emotion-list li strong {
+  color: #245dcc;
+}
+
+/* Mobile responsive design */
+@media (max-width: 600px) {
+  .recorded-video-page {
+    padding: 20px 12px;
+  }
+
+  .recorded-video-container {
+    padding: 20px 15px;
+    border-radius: 15px;
+  }
+
+  .recorded-video-container h1 {
+    font-size: 25px;
+  }
+
+  .page-description {
+    font-size: 14px;
+  }
+
+  .video-actions {
+    flex-direction: column;
+  }
+
+  .video-actions button {
+    width: 100%;
+  }
+
+  .result-item {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .result-item span {
+    text-align: left;
+  }
+
+  .analysis-result {
+    padding: 18px;
+  }
+}

@@ -692,7 +692,130 @@ def emotion_results():
         ),
         "faces": results_copy
     })
+# ============================================================
+# RECORDED VIDEO ANALYSIS
+# ============================================================
 
+@app.route("/analyze-video", methods=["POST"])
+def analyze_video():
+    video_path = None
+    cap = None
+
+    try:
+        if "video" not in request.files:
+            return jsonify({
+                "success": False,
+                "message": "No video received"
+            }), 400
+
+        video_file = request.files["video"]
+
+        if video_file.filename == "":
+            return jsonify({
+                "success": False,
+                "message": "No video selected"
+            }), 400
+
+        # Temporary upload folder
+        upload_folder = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "uploads"
+        )
+
+        os.makedirs(upload_folder, exist_ok=True)
+
+        video_path = os.path.join(
+            upload_folder,
+            "uploaded_video.mp4"
+        )
+
+        video_file.save(video_path)
+
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            return jsonify({
+                "success": False,
+                "message": "Could not open video"
+            }), 400
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+
+        if fps <= 0:
+            fps = 25
+
+        video_duration = total_frames / fps
+
+        emotion_counts = {}
+        total_faces = 0
+        processed_frames = 0
+
+        # Process approximately one frame every second
+        frame_interval = max(int(fps), 1)
+
+        while True:
+            success, frame = cap.read()
+
+            if not success:
+                break
+
+            current_frame_number = int(
+                cap.get(cv2.CAP_PROP_POS_FRAMES)
+            )
+
+            if current_frame_number % frame_interval != 0:
+                continue
+
+            results = process_frame(frame)
+
+            processed_frames += 1
+            total_faces += len(results)
+
+            for result in results:
+                emotion = result["emotion"]
+
+                if emotion not in emotion_counts:
+                    emotion_counts[emotion] = 0
+
+                emotion_counts[emotion] += 1
+
+        cap.release()
+        cap = None
+
+        most_common_emotion = "Unknown"
+
+        if emotion_counts:
+            most_common_emotion = max(
+                emotion_counts,
+                key=emotion_counts.get
+            )
+
+        return jsonify({
+            "success": True,
+            "message": "Video analyzed successfully",
+            "duration_seconds": round(video_duration, 2),
+            "total_frames": total_frames,
+            "processed_frames": processed_frames,
+            "total_faces_detected": total_faces,
+            "emotion_counts": emotion_counts,
+            "most_common_emotion": most_common_emotion
+        })
+
+    except Exception as e:
+        print("VIDEO ANALYSIS ERROR:", e)
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+    finally:
+        if cap is not None:
+            cap.release()
+
+        if video_path and os.path.exists(video_path):
+            os.remove(video_path)
 
 # ============================================================
 # START SERVER

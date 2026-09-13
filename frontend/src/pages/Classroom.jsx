@@ -805,7 +805,12 @@ function Classroom() {
         {/* =========================
             ANALYTICS BUTTON
         ========================= */}
-
+        <button
+  className="recorded-video-button"
+  onClick={() => navigate("/recorded-video")}
+>
+  Upload Recorded Video →
+</button>
         <button
           className="analytics-button"
           onClick={() =>
