@@ -11,7 +11,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 MODEL_PATH = os.path.join(
     BASE_DIR,
-    "emotion",
+    "..",
+    "models",
     "emotion_model.keras"
 )
 
@@ -34,9 +35,9 @@ emotion_labels = [
     "Disgust",
     "Fear",
     "Happy",
+    "Neutral",
     "Sad",
-    "Surprise",
-    "Neutral"
+    "Surprise"
 ]
 
 # =========================
@@ -51,7 +52,7 @@ face_detector = cv2.CascadeClassifier(
 # START WEBCAM
 # =========================
 
-cap = cv2.VideoCapture("http://192.168.43.1:8080/video")
+cap = cv2.VideoCapture("http://192.168.29.179:8080/video")
 
 if not cap.isOpened():
     print("ERROR: Could not open webcam.")

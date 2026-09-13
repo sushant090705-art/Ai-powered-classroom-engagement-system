@@ -1,8 +1,7 @@
 import tensorflow as tf
 
 model = tf.keras.models.load_model(
-    "ai-model/emotion/emotion_model.keras"
+    "ai-model/models/emotion_model.keras"
 )
 
 model.summary()
-

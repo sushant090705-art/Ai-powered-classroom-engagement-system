@@ -83,10 +83,9 @@ BASE_DIR = os.path.dirname(
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "ai-model",
-    "emotion",
+    "models",
     "emotion_model.keras"
 )
-
 print("Loading emotion model...")
 
 emotion_model = tf.keras.models.load_model(
@@ -105,9 +104,9 @@ emotion_labels = [
     "Disgust",
     "Fear",
     "Happy",
+    "Neutral",
     "Sad",
-    "Surprise",
-    "Neutral"
+    "Surprise"
 ]
 
 
