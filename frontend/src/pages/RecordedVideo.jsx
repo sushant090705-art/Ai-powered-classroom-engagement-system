@@ -172,19 +172,6 @@ function RecordedVideo() {
               </span>
             </div>
 
-            <div className="result-item">
-              <strong>Total Frames:</strong>
-              <span>
-                {analysisResult.total_frames}
-              </span>
-            </div>
-
-            <div className="result-item">
-              <strong>Processed Frames:</strong>
-              <span>
-                {analysisResult.processed_frames}
-              </span>
-            </div>
 
             <div className="result-item">
               <strong>Total Faces Detected:</strong>

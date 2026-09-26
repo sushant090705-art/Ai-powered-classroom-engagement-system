@@ -81,6 +81,21 @@ eye_tracks_lock = threading.Lock()
 
 next_track_id = 0
 
+# ============================================================
+# EMOTION TRACKING / SMOOTHING
+# ============================================================
+
+emotion_tracks = {}
+emotion_tracks_lock = threading.Lock()
+next_emotion_track_id = 0
+
+EMOTION_MIN_CONFIDENCE = 0.45
+EMOTION_MIN_MARGIN = 0.08
+EMOTION_SMOOTHING_ALPHA = 0.35
+EMOTION_TRACK_TIMEOUT = 3.0
+EMOTION_TRACK_DISTANCE = 220
+
+
 
 # ============================================================
 # LOAD YOLO MODEL
@@ -601,9 +616,434 @@ def update_eye_display_state(
             return "Unknown"
 
 
+
+# ============================================================
+# GET EMOTION TRACK ID
+# ============================================================
+
+def get_emotion_track_id(center_x, center_y):
+
+    global next_emotion_track_id
+
+    current_time = time.time()
+
+    with emotion_tracks_lock:
+
+        old_tracks = [
+            track_id
+            for track_id, track in emotion_tracks.items()
+            if current_time - track["last_seen"] > EMOTION_TRACK_TIMEOUT
+        ]
+
+        for track_id in old_tracks:
+            del emotion_tracks[track_id]
+
+        best_track_id = None
+        best_distance = float("inf")
+
+        for track_id, track in emotion_tracks.items():
+
+            distance = np.sqrt(
+                (center_x - track["center_x"]) ** 2
+                +
+                (center_y - track["center_y"]) ** 2
+            )
+
+            if (
+                distance < best_distance
+                and
+                distance < EMOTION_TRACK_DISTANCE
+            ):
+                best_distance = distance
+                best_track_id = track_id
+
+        if best_track_id is None:
+
+            best_track_id = next_emotion_track_id
+            next_emotion_track_id += 1
+
+            emotion_tracks[best_track_id] = {
+                "center_x": center_x,
+                "center_y": center_y,
+                "last_seen": current_time,
+                "probabilities": np.zeros(
+                    len(emotion_labels),
+                    dtype=np.float32
+                )
+            }
+
+        else:
+
+            emotion_tracks[best_track_id]["center_x"] = center_x
+            emotion_tracks[best_track_id]["center_y"] = center_y
+            emotion_tracks[best_track_id]["last_seen"] = current_time
+
+        return best_track_id
+
+
+def reset_emotion_tracking():
+
+    global next_emotion_track_id
+
+    with emotion_tracks_lock:
+
+        emotion_tracks.clear()
+        next_emotion_track_id = 0
+
+
+def detect_best_face(person_crop):
+
+    if person_crop is None or person_crop.size == 0:
+        return None
+
+    gray_person = cv2.cvtColor(
+        person_crop,
+        cv2.COLOR_BGR2GRAY
+    )
+
+    person_h, person_w = gray_person.shape[:2]
+
+    faces = face_detector.detectMultiScale(
+        gray_person,
+        scaleFactor=1.10,
+        minNeighbors=7,
+        minSize=(50, 50)
+    )
+
+    candidates = []
+
+    for (
+        fx,
+        fy,
+        fw,
+        fh
+    ) in faces:
+
+        if fw <= 0 or fh <= 0:
+            continue
+
+        aspect_ratio = fw / float(fh)
+
+        if (
+            aspect_ratio < 0.65
+            or
+            aspect_ratio > 1.45
+        ):
+            continue
+
+        face_area_ratio = (
+            (fw * fh)
+            /
+            float(
+                max(
+                    person_w * person_h,
+                    1
+                )
+            )
+        )
+
+        if face_area_ratio < 0.008:
+            continue
+
+        face_center_y = (
+            fy
+            +
+            (fh / 2.0)
+        )
+
+        if face_center_y > person_h * 0.68:
+            continue
+
+        candidates.append(
+            (
+                fw * fh,
+                fx,
+                fy,
+                fw,
+                fh
+            )
+        )
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda item: item[0],
+        reverse=True
+    )
+
+    (
+        _,
+        fx,
+        fy,
+        fw,
+        fh
+    ) = candidates[0]
+
+    return (
+        int(fx),
+        int(fy),
+        int(fw),
+        int(fh)
+    )
+
+
+def prepare_emotion_input(
+    face_gray,
+    face_color
+):
+
+    input_shape = emotion_model.input_shape
+
+    target_h = 48
+    target_w = 48
+    channels = 1
+
+    try:
+
+        if len(input_shape) >= 3:
+
+            if input_shape[1] is not None:
+                target_h = int(
+                    input_shape[1]
+                )
+
+            if input_shape[2] is not None:
+                target_w = int(
+                    input_shape[2]
+                )
+
+        if (
+            len(input_shape) == 4
+            and
+            input_shape[3] is not None
+        ):
+            channels = int(
+                input_shape[3]
+            )
+
+    except Exception:
+        pass
+
+    if channels == 1:
+
+        image = cv2.resize(
+            face_gray,
+            (
+                target_w,
+                target_h
+            ),
+            interpolation=cv2.INTER_AREA
+        )
+
+        image = (
+            image.astype(
+                "float32"
+            )
+            /
+            255.0
+        )
+
+        image = np.expand_dims(
+            image,
+            axis=-1
+        )
+
+    else:
+
+        image = cv2.resize(
+            face_color,
+            (
+                target_w,
+                target_h
+            ),
+            interpolation=cv2.INTER_AREA
+        )
+
+        image = cv2.cvtColor(
+            image,
+            cv2.COLOR_BGR2RGB
+        )
+
+        image = (
+            image.astype(
+                "float32"
+            )
+            /
+            255.0
+        )
+
+    return np.expand_dims(
+        image,
+        axis=0
+    )
+
+
+def get_stable_emotion(
+    probabilities,
+    center_x,
+    center_y
+):
+
+    probabilities = np.asarray(
+        probabilities,
+        dtype=np.float32
+    ).reshape(-1)
+
+    if len(probabilities) != len(
+        emotion_labels
+    ):
+        return (
+            "Unknown",
+            0.0
+        )
+
+    probabilities = np.nan_to_num(
+        probabilities,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0
+    )
+
+    probability_sum = float(
+        np.sum(probabilities)
+    )
+
+    if probability_sum > 0:
+        probabilities = (
+            probabilities
+            /
+            probability_sum
+        )
+
+    raw_order = np.argsort(
+        probabilities
+    )[::-1]
+
+    raw_top = int(
+        raw_order[0]
+    )
+
+    raw_second = int(
+        raw_order[1]
+    )
+
+    raw_confidence = float(
+        probabilities[raw_top]
+    )
+
+    raw_margin = (
+        raw_confidence
+        -
+        float(
+            probabilities[raw_second]
+        )
+    )
+
+    track_id = get_emotion_track_id(
+        center_x,
+        center_y
+    )
+
+    with emotion_tracks_lock:
+
+        track = emotion_tracks.get(
+            track_id
+        )
+
+        if track is None:
+            return (
+                "Unknown",
+                raw_confidence
+            )
+
+        previous = track[
+            "probabilities"
+        ]
+
+        if float(
+            np.sum(previous)
+        ) <= 0:
+
+            smoothed = probabilities
+
+        else:
+
+            smoothed = (
+                (
+                    1.0
+                    -
+                    EMOTION_SMOOTHING_ALPHA
+                )
+                *
+                previous
+                +
+                EMOTION_SMOOTHING_ALPHA
+                *
+                probabilities
+            )
+
+        smoothed_sum = float(
+            np.sum(smoothed)
+        )
+
+        if smoothed_sum > 0:
+            smoothed = (
+                smoothed
+                /
+                smoothed_sum
+            )
+
+        track[
+            "probabilities"
+        ] = smoothed
+
+    order = np.argsort(
+        smoothed
+    )[::-1]
+
+    top_index = int(
+        order[0]
+    )
+
+    second_index = int(
+        order[1]
+    )
+
+    confidence = float(
+        smoothed[top_index]
+    )
+
+    margin = (
+        confidence
+        -
+        float(
+            smoothed[second_index]
+        )
+    )
+
+    if (
+        confidence < EMOTION_MIN_CONFIDENCE
+        or
+        margin < EMOTION_MIN_MARGIN
+    ):
+
+        return (
+            "Unknown",
+            confidence
+        )
+
+    return (
+        emotion_labels[top_index],
+        confidence
+    )
+
+
+
 # ============================================================
 # PROCESS FRAME
 # ============================================================
+
 
 def process_frame(frame):
 
@@ -618,23 +1058,39 @@ def process_frame(frame):
         yolo_results = yolo_model(
             frame,
             classes=[0],
-            conf=0.40,
+            conf=0.50,
+            iou=0.45,
+            imgsz=1280,
             verbose=False
+        )
+
+        person_boxes = yolo_results[0].boxes
+
+        print(
+            "YOLO PERSONS DETECTED:",
+            len(person_boxes)
         )
 
         # ====================================================
         # 2. PROCESS EACH PERSON
         # ====================================================
 
-        for box in yolo_results[0].boxes:
+        for box in person_boxes:
 
             x1, y1, x2, y2 = map(
                 int,
                 box.xyxy[0].tolist()
             )
 
-            x1 = max(0, x1)
-            y1 = max(0, y1)
+            x1 = max(
+                0,
+                x1
+            )
+
+            y1 = max(
+                0,
+                y1
+            )
 
             x2 = min(
                 frame.shape[1],
@@ -652,462 +1108,473 @@ def process_frame(frame):
             ]
 
             if person_crop.size == 0:
-
                 continue
 
             # =================================================
-            # 3. FACE DETECTION
+            # 3. ROBUST FACE DETECTION
             # =================================================
+
+            face_box = detect_best_face(
+                person_crop
+            )
+
+            if face_box is None:
+
+                cv2.rectangle(
+                    frame,
+                    (x1, y1),
+                    (x2, y2),
+                    (255, 0, 0),
+                    2
+                )
+
+                cv2.putText(
+                    frame,
+                    "Person - Face not clear",
+                    (
+                        x1,
+                        max(
+                            y1 - 10,
+                            20
+                        )
+                    ),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.65,
+                    (255, 0, 0),
+                    2
+                )
+
+                continue
+
+            (
+                fx,
+                fy,
+                fw,
+                fh
+            ) = face_box
+
+            face_color = person_crop[
+                fy:fy + fh,
+                fx:fx + fw
+            ]
 
             gray_person = cv2.cvtColor(
                 person_crop,
                 cv2.COLOR_BGR2GRAY
             )
 
-            faces = face_detector.detectMultiScale(
-                gray_person,
-                scaleFactor=1.3,
-                minNeighbors=5,
-                minSize=(50, 50)
+            face_gray = gray_person[
+                fy:fy + fh,
+                fx:fx + fw
+            ]
+
+            if (
+                face_color.size == 0
+                or
+                face_gray.size == 0
+            ):
+                continue
+
+            if (
+                fw < 50
+                or
+                fh < 50
+            ):
+                continue
+
+            # =================================================
+            # 4. EMOTION MODEL
+            # =================================================
+
+            emotion_input = prepare_emotion_input(
+                face_gray,
+                face_color
+            )
+
+            predictions = emotion_model.predict(
+                emotion_input,
+                verbose=0
+            )[0]
+
+            face_center_x = (
+                x1
+                +
+                fx
+                +
+                fw // 2
+            )
+
+            face_center_y = (
+                y1
+                +
+                fy
+                +
+                fh // 2
+            )
+
+            (
+                emotion,
+                emotion_confidence
+            ) = get_stable_emotion(
+                predictions,
+                face_center_x,
+                face_center_y
+            )
+
+            confidence = (
+                emotion_confidence
+                *
+                100
+            )
+
+            print(
+                "EMOTION:",
+                emotion,
+                "CONFIDENCE:",
+                round(
+                    confidence,
+                    1
+                )
             )
 
             # =================================================
-            # 4. PROCESS EACH FACE
+            # 5. EYE DETECTION
             # =================================================
 
+            eyes = eye_detector.detectMultiScale(
+                face_gray,
+                scaleFactor=1.1,
+                minNeighbors=5,
+                minSize=(15, 15)
+            )
+
+            eye_predictions = []
+
             for (
-                fx,
-                fy,
-                fw,
-                fh
-            ) in faces:
+                ex,
+                ey,
+                ew,
+                eh
+            ) in eyes[:2]:
 
-                face_color = person_crop[
-                    fy:fy + fh,
-                    fx:fx + fw
+                eye_crop = face_color[
+                    ey:ey + eh,
+                    ex:ex + ew
                 ]
 
-                face_gray = gray_person[
-                    fy:fy + fh,
-                    fx:fx + fw
-                ]
-
-                if (
-                    face_color.size == 0
-                    or
-                    face_gray.size == 0
-                ):
-
+                if eye_crop.size == 0:
                     continue
 
-                # =================================================
-                # 5. EMOTION MODEL
-                # =================================================
-
-                emotion_input = cv2.resize(
-                    face_gray,
-                    (48, 48)
+                (
+                    eye_state_single,
+                    eye_confidence_single
+                ) = predict_eye_state(
+                    eye_crop
                 )
 
-                emotion_input = (
-                    emotion_input.astype(
-                        "float32"
-                    ) / 255.0
-                )
-
-                emotion_input = np.expand_dims(
-                    emotion_input,
-                    axis=0
-                )
-
-                emotion_input = np.expand_dims(
-                    emotion_input,
-                    axis=-1
-                )
-
-                predictions = emotion_model.predict(
-                    emotion_input,
-                    verbose=0
-                )
-
-                emotion_index = np.argmax(
-                    predictions[0]
-                )
-
-                emotion = emotion_labels[
-                    emotion_index
-                ]
-
-                confidence = (
-                    float(
-                        predictions[0][
-                            emotion_index
-                        ]
-                    )
-                    *
-                    100
-                )
-
-                # =================================================
-                # 6. EYE DETECTION
-                # =================================================
-
-                eyes = eye_detector.detectMultiScale(
-                    face_gray,
-                    scaleFactor=1.1,
-                    minNeighbors=5,
-                    minSize=(15, 15)
-                )
-
-                eye_predictions = []
-
-                # =================================================
-                # FIRST: USE HAAR DETECTED EYES
-                # =================================================
-
-                for (
-                    ex,
-                    ey,
-                    ew,
-                    eh
-                ) in eyes[:2]:
-
-                    eye_crop = face_color[
-                        ey:ey + eh,
-                        ex:ex + ew
-                    ]
-
-                    if eye_crop.size == 0:
-
-                        continue
-
+                eye_predictions.append(
                     (
                         eye_state_single,
                         eye_confidence_single
-                    ) = predict_eye_state(
-                        eye_crop
+                    )
+                )
+
+            # =================================================
+            # 6. EYE FALLBACK
+            # =================================================
+
+            if not eye_predictions:
+
+                face_h, face_w = (
+                    face_color.shape[:2]
+                )
+
+                left_x1 = int(
+                    face_w * 0.10
+                )
+
+                left_x2 = int(
+                    face_w * 0.48
+                )
+
+                eye_y1 = int(
+                    face_h * 0.18
+                )
+
+                eye_y2 = int(
+                    face_h * 0.48
+                )
+
+                right_x1 = int(
+                    face_w * 0.52
+                )
+
+                right_x2 = int(
+                    face_w * 0.90
+                )
+
+                left_eye = face_color[
+                    eye_y1:eye_y2,
+                    left_x1:left_x2
+                ]
+
+                right_eye = face_color[
+                    eye_y1:eye_y2,
+                    right_x1:right_x2
+                ]
+
+                if left_eye.size != 0:
+
+                    state, conf = (
+                        predict_eye_state(
+                            left_eye
+                        )
                     )
 
                     eye_predictions.append(
                         (
-                            eye_state_single,
-                            eye_confidence_single
-                        )
-                    )
-
-                # =================================================
-                # FALLBACK:
-                # IF HAAR DOES NOT FIND EYES
-                #
-                # This is important when eyes are closed.
-                # =================================================
-
-                if not eye_predictions:
-
-                    face_h, face_w = (
-                        face_color.shape[:2]
-                    )
-
-                    # Left eye region
-                    left_x1 = int(
-                        face_w * 0.10
-                    )
-
-                    left_x2 = int(
-                        face_w * 0.48
-                    )
-
-                    eye_y1 = int(
-                        face_h * 0.18
-                    )
-
-                    eye_y2 = int(
-                        face_h * 0.48
-                    )
-
-                    # Right eye region
-                    right_x1 = int(
-                        face_w * 0.52
-                    )
-
-                    right_x2 = int(
-                        face_w * 0.90
-                    )
-
-                    # Left eye crop
-                    left_eye = face_color[
-                        eye_y1:eye_y2,
-                        left_x1:left_x2
-                    ]
-
-                    # Right eye crop
-                    right_eye = face_color[
-                        eye_y1:eye_y2,
-                        right_x1:right_x2
-                    ]
-
-                    if left_eye.size != 0:
-
-                        state, conf = (
-                            predict_eye_state(
-                                left_eye
-                            )
-                        )
-
-                        eye_predictions.append(
-                            (state, conf)
-                        )
-
-                    if right_eye.size != 0:
-
-                        state, conf = (
-                            predict_eye_state(
-                                right_eye
-                            )
-                        )
-
-                        eye_predictions.append(
-                            (state, conf)
-                        )
-
-                # =================================================
-                # 7. COMBINE EYE PREDICTIONS
-                # =================================================
-
-                if eye_predictions:
-
-                    close_count = sum(
-
-                        1
-
-                        for (
                             state,
-                            _
-                        )
-                        in eye_predictions
-
-                        if state == "Close"
-                    )
-
-                    if (
-                        close_count
-                        >
-                        len(eye_predictions) / 2
-                    ):
-
-                        raw_eye_state = "Close"
-
-                    else:
-
-                        raw_eye_state = "Open"
-
-                    eye_confidence = (
-                        sum(
-                            confidence_value
-
-                            for (
-                                _,
-                                confidence_value
-                            )
-                            in eye_predictions
-                        )
-                        /
-                        len(
-                            eye_predictions
+                            conf
                         )
                     )
 
-                    # =================================================
-                    # 8. FACE CENTER
-                    # =================================================
+                if right_eye.size != 0:
 
-                    face_center_x = (
-                        x1
-                        +
-                        fx
-                        +
-                        fw // 2
-                    )
-
-                    face_center_y = (
-                        y1
-                        +
-                        fy
-                        +
-                        fh // 2
-                    )
-
-                    # =================================================
-                    # 9. TRACK THIS FACE
-                    # =================================================
-
-                    track_id = get_eye_track_id(
-                        face_center_x,
-                        face_center_y
-                    )
-
-                    # =================================================
-                    # 10. CONVERT TO DISPLAY STATE
-                    # =================================================
-
-                    eye_state = (
-                        update_eye_display_state(
-                            track_id,
-                            raw_eye_state
+                    state, conf = (
+                        predict_eye_state(
+                            right_eye
                         )
                     )
-                    print(
-    f"Track {track_id} | Raw Eye: {raw_eye_state} | "
-    f"Display Eye: {eye_state}"
-)
+
+                    eye_predictions.append(
+                        (
+                            state,
+                            conf
+                        )
+                    )
+
+            # =================================================
+            # 7. COMBINE EYE PREDICTIONS
+            # =================================================
+
+            if eye_predictions:
+
+                close_count = sum(
+                    1
+                    for (
+                        state,
+                        _
+                    )
+                    in eye_predictions
+                    if state == "Close"
+                )
+
+                if (
+                    close_count
+                    >
+                    len(
+                        eye_predictions
+                    ) / 2
+                ):
+
+                    raw_eye_state = "Close"
 
                 else:
 
-                    eye_state = "Unknown"
+                    raw_eye_state = "Open"
 
-                    eye_confidence = 0.0
-
-                # =================================================
-                # 11. ORIGINAL FRAME COORDINATES
-                # =================================================
-
-                face_x = x1 + fx
-                face_y = y1 + fy
-
-                # =================================================
-                # 12. STORE RESULT
-                # =================================================
-
-                result = {
-
-                    "emotion": emotion,
-
-                    "confidence": round(
-                        confidence,
-                        2
-                    ),
-
-                    "eye_state": eye_state,
-
-                    "eye_confidence": round(
-                        eye_confidence,
-                        2
-                    ),
-
-                    "x": int(face_x),
-
-                    "y": int(face_y),
-
-                    "width": int(fw),
-
-                    "height": int(fh),
-
-                    "person_x": int(x1),
-
-                    "person_y": int(y1),
-
-                    "person_width": int(
-                        x2 - x1
-                    ),
-
-                    "person_height": int(
-                        y2 - y1
+                eye_confidence = (
+                    sum(
+                        confidence_value
+                        for (
+                            _,
+                            confidence_value
+                        )
+                        in eye_predictions
                     )
-                }
+                    /
+                    len(
+                        eye_predictions
+                    )
+                )
 
-                results.append(result)
+                track_id = get_eye_track_id(
+                    face_center_x,
+                    face_center_y
+                )
 
-                # =================================================
-                # 13. DRAW FACE
-                # =================================================
+                eye_state = (
+                    update_eye_display_state(
+                        track_id,
+                        raw_eye_state
+                    )
+                )
+
+                print(
+                    f"Track {track_id} | "
+                    f"Raw Eye: {raw_eye_state} | "
+                    f"Display Eye: {eye_state}"
+                )
+
+            else:
+
+                eye_state = "Unknown"
+                eye_confidence = 0.0
+
+            # =================================================
+            # 8. STORE RESULT
+            # =================================================
+
+            face_x = (
+                x1
+                +
+                fx
+            )
+
+            face_y = (
+                y1
+                +
+                fy
+            )
+
+            result = {
+
+                "emotion": emotion,
+
+                "confidence": round(
+                    confidence,
+                    2
+                ),
+
+                "eye_state": eye_state,
+
+                "eye_confidence": round(
+                    eye_confidence,
+                    2
+                ),
+
+                "x": int(face_x),
+
+                "y": int(face_y),
+
+                "width": int(fw),
+
+                "height": int(fh),
+
+                "person_x": int(x1),
+
+                "person_y": int(y1),
+
+                "person_width": int(
+                    x2 - x1
+                ),
+
+                "person_height": int(
+                    y2 - y1
+                )
+            }
+
+            results.append(
+                result
+            )
+
+            # =================================================
+            # 9. DRAW FACE
+            # =================================================
+
+            cv2.rectangle(
+                frame,
+                (
+                    face_x,
+                    face_y
+                ),
+                (
+                    face_x + fw,
+                    face_y + fh
+                ),
+                (0, 255, 0),
+                2
+            )
+
+            # =================================================
+            # 10. DRAW EYES
+            # =================================================
+
+            for (
+                ex,
+                ey,
+                ew,
+                eh
+            ) in eyes[:2]:
 
                 cv2.rectangle(
                     frame,
                     (
-                        face_x,
-                        face_y
+                        face_x + ex,
+                        face_y + ey
                     ),
                     (
-                        face_x + fw,
-                        face_y + fh
+                        face_x + ex + ew,
+                        face_y + ey + eh
                     ),
-                    (0, 255, 0),
+                    (255, 0, 0),
                     2
                 )
 
-                # =================================================
-                # 14. DRAW DETECTED EYES
-                # =================================================
+            # =================================================
+            # 11. DISPLAY EMOTION
+            # =================================================
 
-                for (
-                    ex,
-                    ey,
-                    ew,
-                    eh
-                ) in eyes[:2]:
+            if emotion == "Unknown":
 
-                    cv2.rectangle(
-                        frame,
-                        (
-                            face_x + ex,
-                            face_y + ey
-                        ),
-                        (
-                            face_x + ex + ew,
-                            face_y + ey + eh
-                        ),
-                        (255, 0, 0),
-                        2
-                    )
+                text = "Emotion: Uncertain"
 
-                # =================================================
-                # 15. DISPLAY EMOTION
-                # =================================================
+            else:
 
                 text = (
                     f"{emotion}: "
                     f"{confidence:.1f}%"
                 )
 
-                eye_text = (
-                    f"Eyes: "
-                    f"{eye_state}"
-                )
+            eye_text = (
+                f"Eyes: "
+                f"{eye_state}"
+            )
 
-                cv2.putText(
-                    frame,
-                    text,
-                    (
-                        face_x,
-                        max(
-                            face_y - 35,
-                            20
-                        )
-                    ),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
-                    (0, 255, 0),
-                    2
-                )
+            cv2.putText(
+                frame,
+                text,
+                (
+                    face_x,
+                    max(
+                        face_y - 35,
+                        20
+                    )
+                ),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 0),
+                2
+            )
 
-                cv2.putText(
-                    frame,
-                    eye_text,
-                    (
-                        face_x,
-                        max(
-                            face_y - 10,
-                            20
-                        )
-                    ),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 0, 0),
-                    2
-                )
+            cv2.putText(
+                frame,
+                eye_text,
+                (
+                    face_x,
+                    max(
+                        face_y - 10,
+                        20
+                    )
+                ),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 0, 0),
+                2
+            )
 
             # =================================================
-            # 16. DRAW YOLO PERSON BOX
+            # 12. DRAW PERSON
             # =================================================
 
             cv2.rectangle(
@@ -1356,10 +1823,12 @@ def connect_camera():
 
         latest_frame = None
 
-    # Reset eye tracking
+    # Reset eye and emotion tracking
     with eye_tracks_lock:
 
         eye_tracks.clear()
+
+    reset_emotion_tracking()
 
     print("--------------------------------")
 
@@ -1445,10 +1914,12 @@ def disconnect_camera():
 
         latest_results = []
 
-    # Reset eye tracking
+    # Reset eye and emotion tracking
     with eye_tracks_lock:
 
         eye_tracks.clear()
+
+    reset_emotion_tracking()
 
     print(
         "Camera disconnected"
@@ -1736,9 +2207,9 @@ def analyze_video():
 
         emotion_counts = {}
 
-        total_faces = 0
-
         processed_frames = 0
+
+        person_counts = []
 
         frame_interval = max(
             int(fps),
@@ -1747,10 +2218,12 @@ def analyze_video():
 
         frame_number = 0
 
-        # Reset eye tracking for recorded video
+        # Reset eye and emotion tracking for recorded video
         with eye_tracks_lock:
 
             eye_tracks.clear()
+
+        reset_emotion_tracking()
 
         while True:
 
@@ -1771,21 +2244,49 @@ def analyze_video():
 
                 continue
 
+            # ====================================================
+            # YOLO PERSON COUNT
+            # ====================================================
+
+            # Count persons in every analyzed frame.
+            yolo_count_results = yolo_model(
+                frame,
+                classes=[0],
+                conf=0.50,
+                iou=0.45,
+                imgsz=1280,
+                verbose=False
+            )
+
+            person_count = len(
+                yolo_count_results[0].boxes
+            )
+
+            print(
+                "RECORDED VIDEO YOLO COUNT:",
+                person_count
+            )
+
+            person_counts.append(
+                person_count
+            )
+
+            # Process frame for face, emotion and eye analysis.
             results = process_frame(
                 frame
             )
 
             processed_frames += 1
 
-            total_faces += len(
-                results
-            )
 
             for result in results:
 
                 emotion = result[
                     "emotion"
                 ]
+
+                if emotion == "Unknown":
+                    continue
 
                 if (
                     emotion
@@ -1808,6 +2309,15 @@ def analyze_video():
         # ====================================================
         # MOST COMMON EMOTION
         # ====================================================
+        from collections import Counter
+        most_common_person_count = 0
+
+        if person_counts:
+            most_common_person_count = Counter(
+                person_counts
+            ).most_common(1)[0][0]
+        print("PERSON COUNTS:", person_counts)
+        print("MOST COMMON PERSON COUNT:", most_common_person_count)
 
         most_common_emotion = "Unknown"
 
@@ -1831,14 +2341,8 @@ def analyze_video():
                     2
                 ),
 
-            "total_frames":
-                total_frames,
-
-            "processed_frames":
-                processed_frames,
-
             "total_faces_detected":
-                total_faces,
+                most_common_person_count,
 
             "emotion_counts":
                 emotion_counts,
