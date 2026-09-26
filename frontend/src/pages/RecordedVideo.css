@@ -1,265 +1,572 @@
-/* Main page */
+/* ============================================================
+   PAGE
+============================================================ */
+
 .recorded-video-page {
   min-height: 100vh;
-  padding: 40px 20px;
-  background: linear-gradient(135deg, #eef4ff, #f8fbff);
+  padding: 40px 20px 80px;
+  background: #f4f7fc;
+  color: #17365d;
 }
 
-/* Main container */
+
 .recorded-video-container {
-  width: 100%;
-  max-width: 900px;
+  width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 32px;
-  background: #ffffff;
-  border: 1px solid #e1e8f5;
-  border-radius: 20px;
-  box-shadow: 0 12px 35px rgba(30, 70, 130, 0.12);
 }
 
-/* Heading */
-.recorded-video-container h1 {
-  margin-bottom: 12px;
-  color: #173b75;
-  font-size: 32px;
-  font-weight: 700;
-  text-align: center;
-}
 
-/* Description */
-.page-description {
+/* ============================================================
+   HEADER
+============================================================ */
+
+.recorded-header {
   margin-bottom: 30px;
-  color: #667085;
+}
+
+
+.page-label,
+.section-label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: #2764c8;
+}
+
+
+.recorded-header h1 {
+  margin: 0;
+  font-size: 38px;
+  line-height: 1.15;
+}
+
+
+.page-description {
+  max-width: 700px;
+  margin-top: 12px;
+  color: #63748a;
   font-size: 16px;
   line-height: 1.6;
-  text-align: center;
 }
 
-/* Upload section */
-.upload-section {
+
+/* ============================================================
+   UPLOAD CARD
+============================================================ */
+
+.upload-card {
+  background: white;
+  border: 1px solid #dce6f4;
+  border-radius: 20px;
+  padding: 45px 30px;
+  text-align: center;
+  box-shadow: 0 10px 35px rgba(30, 75, 130, 0.08);
+}
+
+
+.upload-icon {
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  background: #eaf2ff;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 25px;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
 }
 
-.upload-label {
-  color: #243b64;
-  font-size: 16px;
-  font-weight: 600;
+
+.upload-card h2 {
+  margin: 0;
+  font-size: 25px;
 }
 
-.upload-section input[type="file"] {
-  width: 100%;
-  padding: 14px;
-  color: #344054;
-  background: #f8faff;
-  border: 2px dashed #8ba9dc;
-  border-radius: 12px;
+
+.upload-card p {
+  margin: 10px 0 25px;
+  color: #718096;
+}
+
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 160px;
+  padding: 13px 24px;
+  border-radius: 10px;
+  background: #2864c7;
+  color: white;
+  font-weight: 700;
   cursor: pointer;
+  transition: 0.2s ease;
 }
 
-.upload-section input[type="file"]:hover {
-  background: #eef5ff;
-  border-color: #3569c8;
+
+.upload-button:hover {
+  transform: translateY(-1px);
+  background: #1f53aa;
 }
 
-/* Video preview */
-.video-preview-section {
+
+/* ============================================================
+   PREVIEW CARD
+============================================================ */
+
+.preview-card,
+.result-card,
+.loading-card {
   margin-top: 25px;
-  text-align: center;
+  background: white;
+  border: 1px solid #dce6f4;
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 10px 35px rgba(30, 75, 130, 0.07);
 }
 
-.recorded-video-player {
-  display: block;
+
+.section-header {
+  margin-bottom: 20px;
+}
+
+
+.section-header h2,
+.result-header h2 {
+  margin: 0;
+  font-size: 27px;
+}
+
+
+.video-preview {
   width: 100%;
-  max-height: 500px;
-  background: #101828;
+  max-height: 560px;
+  display: block;
   border-radius: 14px;
-  object-fit: contain;
+  background: #101722;
 }
 
-.video-name {
-  margin: 15px 0;
-  color: #475467;
-  font-size: 15px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
+
+.file-name {
+  margin: 14px 0 0;
+  color: #65758b;
+  font-size: 14px;
+  word-break: break-all;
 }
 
-/* Buttons */
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+
 .video-actions {
   display: flex;
   justify-content: center;
-  gap: 15px;
+  gap: 14px;
+  margin-top: 24px;
   flex-wrap: wrap;
-  margin-top: 20px;
 }
+
 
 .video-actions button {
-  min-width: 160px;
+  min-width: 170px;
   padding: 13px 22px;
-  border: none;
   border-radius: 10px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: 0.25s ease;
+  transition: 0.2s ease;
 }
 
-.remove-video-button {
-  color: #b42318;
-  background: #fef3f2;
-  border: 1px solid #fecdca !important;
+
+.remove-button {
+  border: 1px solid #efb9b9;
+  background: #fff7f7;
+  color: #c64545;
 }
 
-.remove-video-button:hover {
-  background: #fee4e2;
-  transform: translateY(-2px);
+
+.remove-button:hover:not(:disabled) {
+  background: #ffeded;
 }
 
-.analyze-video-button {
-  color: #ffffff;
-  background: #245dcc;
+
+.analyze-button {
+  border: none;
+  background: #2864c7;
+  color: white;
 }
 
-.analyze-video-button:hover {
-  background: #1747a1;
-  transform: translateY(-2px);
+
+.analyze-button:hover:not(:disabled) {
+  background: #1f53aa;
 }
+
 
 .video-actions button:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
-  transform: none;
 }
 
-/* Loading message */
-.loading-message {
-  margin-top: 25px;
-  padding: 18px;
-  color: #1747a1;
-  background: #eef4ff;
-  border: 1px solid #b9d0ff;
+
+/* ============================================================
+   LOADING
+============================================================ */
+
+.loading-card {
+  text-align: center;
+}
+
+
+.loading-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 18px;
+  border: 4px solid #dce8fa;
+  border-top-color: #2864c7;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+
+@keyframes spin {
+
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+
+}
+
+
+.loading-card h3 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+
+
+.loading-card p {
+  margin: 0 auto 8px;
+  max-width: 650px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+
+.loading-card span {
+  color: #8a98aa;
+  font-size: 14px;
+}
+
+
+/* ============================================================
+   MESSAGE
+============================================================ */
+
+.message-card {
+  margin-top: 20px;
+  padding: 18px 20px;
   border-radius: 12px;
-  text-align: center;
 }
 
-/* Error message */
-.error-message {
+
+.message-card strong {
+  display: block;
+  margin-bottom: 5px;
+}
+
+
+.message-card p {
+  margin: 0;
+}
+
+
+.error-card {
+  border: 1px solid #f1c2c2;
+  background: #fff7f7;
+  color: #a33c3c;
+}
+
+
+.success-card {
+  border: 1px solid #c8e5d1;
+  background: #f5fcf7;
+  color: #267542;
+}
+
+
+/* ============================================================
+   RESULT HEADER
+============================================================ */
+
+.result-card {
   margin-top: 25px;
-  padding: 15px;
-  color: #b42318;
-  background: #fef3f2;
-  border: 1px solid #fecdca;
-  border-radius: 10px;
-  text-align: center;
-  overflow-wrap: anywhere;
 }
 
-/* Analysis result */
-.analysis-result {
-  margin-top: 35px;
-  padding: 25px;
-  background: #f8faff;
-  border: 1px solid #d9e5fa;
-  border-radius: 16px;
+
+.result-header {
+  margin-bottom: 20px;
 }
 
-.analysis-result h2 {
-  margin-bottom: 22px;
-  color: #173b75;
-  font-size: 25px;
-  text-align: center;
+
+/* ============================================================
+   RESULT LIST
+============================================================ */
+
+.result-list {
+  border-top: 1px solid #e3eaf4;
 }
 
-.analysis-result h3 {
-  margin-top: 25px;
-  margin-bottom: 12px;
-  color: #243b64;
-  font-size: 19px;
-}
 
-/* Result rows */
-.result-item {
+.result-row {
+  min-height: 58px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e3eaf4;
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 13px 0;
-  border-bottom: 1px solid #e1e8f5;
-  color: #344054;
 }
 
-.result-item strong {
-  color: #243b64;
+
+.result-row strong {
+  color: #1c3d66;
 }
 
-.result-item span {
-  color: #475467;
+
+.result-row span {
+  color: #4d6380;
   text-align: right;
-  overflow-wrap: anywhere;
 }
 
-/* Emotion list */
-.emotion-list {
-  padding: 0;
-  margin: 0;
-  list-style: none;
+
+.highlight-row {
+  background: #f6f9ff;
+  padding-left: 14px;
+  padding-right: 14px;
+  border-radius: 8px;
 }
 
-.emotion-list li {
+
+.highlight-row span {
+  font-size: 21px;
+  font-weight: 800;
+  color: #2864c7;
+}
+
+
+/* ============================================================
+   MAIN EMOTION
+============================================================ */
+
+.main-emotion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+
+.emotion-big-emoji {
+  font-size: 25px;
+}
+
+
+/* ============================================================
+   EMOTION SECTION
+============================================================ */
+
+.emotion-section {
+  margin-top: 30px;
+}
+
+
+.emotion-section h3,
+.person-section h3 {
+  margin: 0 0 18px;
+  font-size: 22px;
+}
+
+
+.emotion-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(180px, 1fr)
+    );
+  gap: 14px;
+}
+
+
+.emotion-box {
+  border: 1px solid #dfe8f5;
+  border-radius: 14px;
+  padding: 18px;
+  background: #fbfdff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+
+.emotion-box-icon {
+  font-size: 31px;
+}
+
+
+.emotion-name {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+  color: #24476e;
+}
+
+
+.emotion-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #2864c7;
+}
+
+
+.no-data {
+  color: #718096;
+}
+
+
+/* ============================================================
+   PERSON SECTION
+============================================================ */
+
+.person-section {
+  margin-top: 35px;
+  padding-top: 30px;
+  border-top: 1px solid #e1e8f2;
+}
+
+
+.person-grid {
+  display: grid;
+  grid-template-columns:
+    repeat(
+      auto-fit,
+      minmax(230px, 1fr)
+    );
+  gap: 15px;
+}
+
+
+.person-card {
+  padding: 20px;
+  border: 1px solid #dfe8f5;
+  border-radius: 14px;
+  background: #fbfdff;
+}
+
+
+.person-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 17px;
+  font-size: 17px;
+}
+
+
+.person-emotion {
   display: flex;
   justify-content: space-between;
-  gap: 15px;
-  padding: 12px 15px;
-  margin-bottom: 8px;
-  background: #ffffff;
-  border: 1px solid #e1e8f5;
-  border-radius: 8px;
-  color: #344054;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.emotion-list li strong {
-  color: #245dcc;
+
+.person-emotion span {
+  color: #728198;
+  font-size: 14px;
 }
 
-/* Mobile responsive design */
-@media (max-width: 600px) {
+
+.person-emotion strong {
+  color: #285da7;
+}
+
+
+.person-samples {
+  padding-top: 12px;
+  border-top: 1px solid #e5ebf4;
+  color: #7a889c;
+  font-size: 13px;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 700px) {
+
   .recorded-video-page {
-    padding: 20px 12px;
+    padding: 25px 14px 60px;
   }
 
-  .recorded-video-container {
-    padding: 20px 15px;
-    border-radius: 15px;
+
+  .recorded-header h1 {
+    font-size: 29px;
   }
 
-  .recorded-video-container h1 {
-    font-size: 25px;
+
+  .upload-card,
+  .preview-card,
+  .result-card,
+  .loading-card {
+    padding: 22px;
   }
 
-  .page-description {
-    font-size: 14px;
+
+  .result-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
   }
+
+
+  .result-row span {
+    text-align: left;
+  }
+
 
   .video-actions {
     flex-direction: column;
   }
 
+
   .video-actions button {
     width: 100%;
   }
 
-  .result-item {
-    flex-direction: column;
-    gap: 5px;
-  }
+}
+.result-row > span {
+  display: inline-block;
+  min-width: 50px;
+  text-align: right;
+  font-size: 18px;
+  font-weight: 700;
+  color: #173f73;
+}
 
-  .result-item span {
-    text-align: left;
-  }
-
-  .analysis-result {
-    padding: 18px;
-  }
+.highlight-row > span {
+  display: inline-block;
+  min-width: 50px;
+  font-size: 24px;
+  font-weight: 800;
+  color: #2864c7;
 }
