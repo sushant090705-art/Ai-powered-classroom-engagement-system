@@ -40,6 +40,8 @@ print("MongoDB connected successfully!")
 # CAMERA VARIABLES
 # ============================================================
 
+CAMERA_SOURCE = None
+CAMERA_TYPE = "none"
 MOBILE_CAMERA_URL = ""
 
 camera = None
@@ -1253,8 +1255,17 @@ def stop_ai_thread():
 def get_camera():
 
     global camera
+    global CAMERA_SOURCE
+    global CAMERA_TYPE
+    global MOBILE_CAMERA_URL
 
-    if not MOBILE_CAMERA_URL:
+    source = (
+        CAMERA_SOURCE
+        if CAMERA_SOURCE is not None
+        else (MOBILE_CAMERA_URL if MOBILE_CAMERA_URL else None)
+    )
+
+    if source is None or source == "":
 
         return None
 
@@ -1267,16 +1278,45 @@ def get_camera():
         ):
 
             print(
-                "Connecting to mobile camera:"
+                f"Connecting to camera ({CAMERA_TYPE}): {source}"
             )
 
-            print(
-                MOBILE_CAMERA_URL
-            )
+            try:
 
-            camera = cv2.VideoCapture(
-                MOBILE_CAMERA_URL
-            )
+                # If source is an integer index (webcam) or digit string "0", "1"
+                if isinstance(source, int) or (isinstance(source, str) and source.strip().isdigit()):
+
+                    cam_idx = int(source)
+
+                    # On Windows, cv2.CAP_DSHOW initializes webcams much faster than MSMF
+                    if os.name == "nt":
+
+                        camera = cv2.VideoCapture(
+                            cam_idx,
+                            cv2.CAP_DSHOW
+                        )
+
+                    else:
+
+                        camera = cv2.VideoCapture(
+                            cam_idx
+                        )
+
+                else:
+
+                    camera = cv2.VideoCapture(
+                        str(source)
+                    )
+
+            except Exception as e:
+
+                print(
+                    f"Exception creating VideoCapture: {e}"
+                )
+
+                camera = None
+
+                return None
 
             try:
 
@@ -1289,17 +1329,16 @@ def get_camera():
 
                 pass
 
-            if camera.isOpened():
+            if camera is not None and camera.isOpened():
 
                 print(
-                    "Mobile camera connected successfully!"
+                    f"{CAMERA_TYPE.capitalize()} camera connected successfully!"
                 )
 
             else:
 
                 print(
-                    "ERROR: Could not connect "
-                    "to mobile camera."
+                    f"ERROR: Could not connect to {CAMERA_TYPE} camera."
                 )
 
         return camera
@@ -1315,46 +1354,72 @@ def get_camera():
 )
 def connect_camera():
 
+    global CAMERA_SOURCE
+    global CAMERA_TYPE
     global MOBILE_CAMERA_URL
     global camera
     global latest_frame
     global eye_tracks
+    global latest_results
 
-    data = request.get_json()
+    data = request.get_json() or {}
+    cam_type = data.get("type", "phone").lower()
 
-    if (
-        not data
-        or
-        "url" not in data
-    ):
+    if cam_type == "webcam":
 
-        return jsonify({
-            "success": False,
-            "message": "Camera URL is required"
-        }), 400
+        cam_index = data.get("index", 0)
 
-    new_url = data["url"].strip()
+        try:
 
-    if not new_url:
+            cam_index = int(cam_index)
 
-        return jsonify({
-            "success": False,
-            "message": "Camera URL cannot be empty"
-        }), 400
+        except (ValueError, TypeError):
+
+            cam_index = 0
+
+        new_source = cam_index
+        display_name = f"Webcam (Device {cam_index})"
+
+    else:
+
+        cam_type = "phone"
+        new_url = data.get("url", "").strip()
+
+        if not new_url:
+
+            return jsonify({
+                "success": False,
+                "message": "Camera URL cannot be empty for phone mode"
+            }), 400
+
+        new_source = new_url
+        display_name = f"Phone Camera ({new_url})"
 
     with camera_lock:
 
         if camera is not None:
 
-            camera.release()
+            try:
+
+                camera.release()
+
+            except Exception:
+
+                pass
 
             camera = None
 
-        MOBILE_CAMERA_URL = new_url
+        CAMERA_SOURCE = new_source
+        CAMERA_TYPE = cam_type
+        MOBILE_CAMERA_URL = str(new_source)
 
     with frame_lock:
 
         latest_frame = None
+
+    with results_lock:
+
+        latest_results.clear()
 
     # Reset eye tracking
     with eye_tracks_lock:
@@ -1364,11 +1429,7 @@ def connect_camera():
     print("--------------------------------")
 
     print(
-        "Camera URL updated:"
-    )
-
-    print(
-        MOBILE_CAMERA_URL
+        f"Camera source updated: [{CAMERA_TYPE}] {new_source}"
     )
 
     print("--------------------------------")
@@ -1377,7 +1438,9 @@ def connect_camera():
 
     return jsonify({
         "success": True,
-        "message": "Camera connected successfully",
+        "message": f"{display_name} connected successfully",
+        "type": CAMERA_TYPE,
+        "source": str(CAMERA_SOURCE),
         "url": MOBILE_CAMERA_URL
     })
 
@@ -1392,19 +1455,19 @@ def connect_camera():
 )
 def camera_status():
 
+    global CAMERA_SOURCE
+    global CAMERA_TYPE
     global MOBILE_CAMERA_URL
     global camera
 
-    connected = (
-        MOBILE_CAMERA_URL != ""
-        and
-        camera is not None
-        and
-        camera.isOpened()
-    )
+    has_source = (CAMERA_SOURCE is not None) or (MOBILE_CAMERA_URL != "")
+    is_open = camera is not None and camera.isOpened()
+    connected = has_source and is_open
 
     return jsonify({
         "connected": connected,
+        "type": CAMERA_TYPE,
+        "source": str(CAMERA_SOURCE) if CAMERA_SOURCE is not None else "",
         "url": MOBILE_CAMERA_URL
     })
 
@@ -1419,6 +1482,8 @@ def camera_status():
 )
 def disconnect_camera():
 
+    global CAMERA_SOURCE
+    global CAMERA_TYPE
     global MOBILE_CAMERA_URL
     global camera
     global latest_frame
@@ -1431,10 +1496,18 @@ def disconnect_camera():
 
         if camera is not None:
 
-            camera.release()
+            try:
+
+                camera.release()
+
+            except Exception:
+
+                pass
 
             camera = None
 
+        CAMERA_SOURCE = None
+        CAMERA_TYPE = "none"
         MOBILE_CAMERA_URL = ""
 
     with frame_lock:
@@ -1443,7 +1516,7 @@ def disconnect_camera():
 
     with results_lock:
 
-        latest_results = []
+        latest_results.clear()
 
     # Reset eye tracking
     with eye_tracks_lock:
@@ -1488,20 +1561,31 @@ def generate_frames():
         if not success:
 
             print(
-                "Could not read mobile camera frame."
+                f"Could not read frame from camera ({CAMERA_TYPE})."
             )
 
             with camera_lock:
 
                 if camera is not None:
 
-                    camera.release()
+                    try:
+
+                        camera.release()
+
+                    except Exception:
+
+                        pass
 
                 camera = None
 
             time.sleep(1)
 
             continue
+
+        # Mirror frame horizontally for laptop/PC webcam for natural user experience
+        if CAMERA_TYPE == "webcam":
+
+            frame = cv2.flip(frame, 1)
 
         # Save latest frame
         with frame_lock:

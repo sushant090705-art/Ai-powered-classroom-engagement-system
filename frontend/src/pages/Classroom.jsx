@@ -16,6 +16,9 @@ function Classroom() {
   // CAMERA
   // =========================
 
+  const [cameraMode, setCameraMode] = useState("webcam"); // "webcam" | "phone"
+  const [webcamIndex, setWebcamIndex] = useState(0);
+  const [activeCameraType, setActiveCameraType] = useState("none");
   const [cameraUrl, setCameraUrl] = useState("");
   const [cameraConnected, setCameraConnected] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
@@ -30,18 +33,75 @@ function Classroom() {
   const [emotionConfidence, setEmotionConfidence] = useState(0);
   const [facesDetected, setFacesDetected] = useState(0);
 
+  // Check camera status on mount
+  useEffect(() => {
+    const checkCameraStatus = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/camera/status`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.connected) {
+          setCameraConnected(true);
+          setCameraOn(true);
+          setActiveCameraType(data.type || "phone");
+          if (data.type === "webcam") {
+            setCameraMode("webcam");
+            setWebcamIndex(Number(data.source) || 0);
+          } else if (data.type === "phone") {
+            setCameraMode("phone");
+          }
+        }
+      } catch (err) {
+        // Backend not ready or offline
+      }
+    };
+
+    checkCameraStatus();
+  }, []);
+
   // =========================
   // CONNECT CAMERA
   // =========================
 
-  const connectCamera = async () => {
-    if (!cameraUrl.trim()) {
-      setCameraError("Please enter camera URL");
-      return;
+  const connectCamera = async (modeOverride) => {
+    const mode = modeOverride || cameraMode;
+    setCameraError("");
+
+    let payload = {};
+
+    if (mode === "webcam") {
+      payload = {
+        type: "webcam",
+        index: Number(webcamIndex) || 0,
+      };
+    } else {
+      const rawUrl = cameraUrl.trim();
+      if (!rawUrl) {
+        setCameraError("Please enter phone camera IP or URL");
+        return;
+      }
+
+      let formattedUrl = rawUrl;
+      // If user typed only IP or IP:port without http://
+      if (
+        !formattedUrl.startsWith("http://") &&
+        !formattedUrl.startsWith("https://") &&
+        !formattedUrl.startsWith("rtsp://")
+      ) {
+        if (!formattedUrl.includes(":")) {
+          formattedUrl = `http://${formattedUrl}:8080/video`;
+        } else {
+          formattedUrl = `http://${formattedUrl}/video`;
+        }
+      }
+
+      payload = {
+        type: "phone",
+        url: formattedUrl,
+      };
     }
 
     setCameraLoading(true);
-    setCameraError("");
 
     try {
       const response = await fetch(
@@ -51,9 +111,7 @@ function Classroom() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-           url: `http://${cameraUrl.trim()}:8080/video`
-          }),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -67,12 +125,14 @@ function Classroom() {
 
       setCameraConnected(true);
       setCameraOn(true);
+      setActiveCameraType(data.type || mode);
 
     } catch (error) {
       console.error("Camera connection error:", error);
 
       setCameraConnected(false);
       setCameraOn(false);
+      setActiveCameraType("none");
 
       setCameraError(
         error.message || "Unable to connect camera"
@@ -104,6 +164,7 @@ function Classroom() {
 
     setCameraConnected(false);
     setCameraOn(false);
+    setActiveCameraType("none");
 
     setEmotion("Waiting...");
     setEmotionConfidence(0);
@@ -308,59 +369,131 @@ function Classroom() {
 
         <section className="camera-connection-panel">
 
-          <h3>
-            Connect Classroom Camera
-          </h3>
+          <div className="camera-panel-top">
+            <div>
+              <h3>Connect Classroom Camera</h3>
+              <p>
+                Choose between your laptop/PC webcam or stream from a mobile phone via IP Webcam.
+              </p>
+            </div>
 
-          <p>
-            Start IP Webcam on your phone and enter
-            the camera video URL below.
-          </p>
-
-          <div className="camera-url-row">
-
-            <input
-              type="text"
-              value={cameraUrl}
-              onChange={(e) =>
-                setCameraUrl(e.target.value)
-              }
-               placeholder="Enter camera IP (e.g. 192.168.43.1)"
-              disabled={cameraLoading || cameraConnected}
-            />
-
-            {!cameraConnected ? (
-
+            {/* Mode Switcher Tabs */}
+            <div className="camera-mode-tabs">
               <button
-                onClick={connectCamera}
-                disabled={cameraLoading}
+                type="button"
+                className={`camera-mode-tab ${cameraMode === "webcam" ? "active" : ""}`}
+                onClick={() => {
+                  if (!cameraConnected) {
+                    setCameraMode("webcam");
+                    setCameraError("");
+                  }
+                }}
+                disabled={cameraConnected || cameraLoading}
               >
-                {cameraLoading
-                  ? "Connecting..."
-                  : "Connect Camera"}
+                💻 Laptop / PC Webcam
               </button>
 
-            ) : (
-
               <button
-                onClick={disconnectCamera}
+                type="button"
+                className={`camera-mode-tab ${cameraMode === "phone" ? "active" : ""}`}
+                onClick={() => {
+                  if (!cameraConnected) {
+                    setCameraMode("phone");
+                    setCameraError("");
+                  }
+                }}
+                disabled={cameraConnected || cameraLoading}
               >
-                Disconnect
+                📱 Phone Camera (IP)
               </button>
-
-            )}
-
+            </div>
           </div>
+
+          {/* WEBCAM MODE CONTROLS */}
+          {cameraMode === "webcam" && (
+            <div className="camera-controls-wrapper">
+              <div className="camera-webcam-row">
+                <div className="camera-select-field">
+                  <label htmlFor="webcam-select">Camera Device:</label>
+                  <select
+                    id="webcam-select"
+                    value={webcamIndex}
+                    onChange={(e) => setWebcamIndex(e.target.value)}
+                    disabled={cameraLoading || cameraConnected}
+                  >
+                    <option value="0">Camera 0 (Default Built-in Webcam)</option>
+                    <option value="1">Camera 1 (Secondary / External USB)</option>
+                    <option value="2">Camera 2 (External Camera 2)</option>
+                  </select>
+                </div>
+
+                {!cameraConnected ? (
+                  <button
+                    className="camera-action-btn"
+                    onClick={() => connectCamera("webcam")}
+                    disabled={cameraLoading}
+                  >
+                    {cameraLoading ? "Starting Webcam..." : "Start Laptop Webcam"}
+                  </button>
+                ) : (
+                  <button
+                    className="camera-action-btn disconnect"
+                    onClick={disconnectCamera}
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+              <small className="camera-hint">
+                💡 Tip: Uses your built-in PC/laptop webcam directly. Ensure other apps (Zoom, Teams) aren't locking the camera.
+              </small>
+            </div>
+          )}
+
+          {/* PHONE CAMERA MODE CONTROLS */}
+          {cameraMode === "phone" && (
+            <div className="camera-controls-wrapper">
+              <div className="camera-url-row">
+                <input
+                  type="text"
+                  value={cameraUrl}
+                  onChange={(e) => setCameraUrl(e.target.value)}
+                  placeholder="Enter phone IP (e.g. 192.168.1.15) or full video URL"
+                  disabled={cameraLoading || cameraConnected}
+                />
+
+                {!cameraConnected ? (
+                  <button
+                    className="camera-action-btn"
+                    onClick={() => connectCamera("phone")}
+                    disabled={cameraLoading}
+                  >
+                    {cameraLoading ? "Connecting..." : "Connect Phone Camera"}
+                  </button>
+                ) : (
+                  <button
+                    className="camera-action-btn disconnect"
+                    onClick={disconnectCamera}
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+              <small className="camera-hint">
+                💡 Tip: Open the <b>IP Webcam</b> app on Android/iOS, tap "Start server", and enter the displayed IP address.
+              </small>
+            </div>
+          )}
 
           {cameraError && (
             <p className="camera-error">
-              {cameraError}
+              ⚠️ {cameraError}
             </p>
           )}
 
           {cameraConnected && (
             <p className="camera-success">
-              ✓ Camera connected
+              ✓ {activeCameraType === "webcam" ? "Laptop / PC Webcam" : "Phone Camera"} connected and streaming live
             </p>
           )}
 
@@ -397,7 +530,9 @@ function Classroom() {
               <span className="camera-status">
 
                 {cameraOn
-                  ? "Mobile Camera Active"
+                  ? activeCameraType === "webcam"
+                    ? "💻 PC Webcam Active"
+                    : "📱 Phone Camera Active"
                   : "Camera Ready"}
 
               </span>
@@ -481,16 +616,17 @@ function Classroom() {
                 <div className="camera-placeholder">
 
                   <div className="camera-icon">
-                    📱
+                    {cameraMode === "webcam" ? "💻" : "📱"}
                   </div>
 
                   <h3>
-                    Mobile Camera
+                    {cameraMode === "webcam" ? "Laptop / PC Webcam" : "Mobile IP Camera"}
                   </h3>
 
                   <p>
-                    Connect your mobile camera above
-                    to begin classroom monitoring.
+                    {cameraMode === "webcam"
+                      ? "Click 'Start Laptop Webcam' above to begin monitoring with your computer camera."
+                      : "Connect your mobile IP Webcam above to begin classroom monitoring."}
                   </p>
 
                 </div>
