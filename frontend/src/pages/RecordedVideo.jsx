@@ -2,227 +2,147 @@ import { useEffect, useState } from "react";
 import "./RecordedVideo.css";
 
 function RecordedVideo() {
-
   const BACKEND_URL = "http://127.0.0.1:5000";
 
   const [selectedVideo, setSelectedVideo] = useState(null);
-
   const [videoPreview, setVideoPreview] = useState("");
-
   const [analysisResult, setAnalysisResult] = useState(null);
-
   const [analyzing, setAnalyzing] = useState(false);
-
   const [error, setError] = useState("");
-
   const [successMessage, setSuccessMessage] = useState("");
-
 
   // ============================================================
   // CLEAN VIDEO URL
   // ============================================================
 
   useEffect(() => {
-
     return () => {
-
       if (videoPreview) {
-
-        URL.revokeObjectURL(
-          videoPreview
-        );
+        URL.revokeObjectURL(videoPreview);
       }
-
     };
-
   }, [videoPreview]);
-
 
   // ============================================================
   // SELECT VIDEO
   // ============================================================
 
   const handleVideoSelect = (event) => {
-
     const file = event.target.files?.[0];
 
     setError("");
-
     setSuccessMessage("");
-
     setAnalysisResult(null);
 
-
     if (!file) {
-
       return;
     }
 
-
-    // ----------------------------------------------------------
-    // Validate file type
-    // ----------------------------------------------------------
-
+    // Validate video
     if (!file.type.startsWith("video/")) {
-
-      setError(
-        "Please select a valid video file."
-      );
-
+      setError("Please select a valid video file.");
       return;
     }
 
-
-    // ----------------------------------------------------------
     // Remove old preview
-    // ----------------------------------------------------------
-
     if (videoPreview) {
-
-      URL.revokeObjectURL(
-        videoPreview
-      );
+      URL.revokeObjectURL(videoPreview);
     }
 
-
-    // ----------------------------------------------------------
     // Create new preview
-    // ----------------------------------------------------------
-
-    const previewUrl = URL.createObjectURL(
-      file
-    );
-
+    const previewUrl = URL.createObjectURL(file);
 
     setSelectedVideo(file);
-
-    setVideoPreview(
-      previewUrl
-    );
+    setVideoPreview(previewUrl);
   };
-
 
   // ============================================================
   // REMOVE VIDEO
   // ============================================================
 
   const removeVideo = () => {
-
     if (videoPreview) {
-
-      URL.revokeObjectURL(
-        videoPreview
-      );
+      URL.revokeObjectURL(videoPreview);
     }
 
-
     setSelectedVideo(null);
-
     setVideoPreview("");
-
     setAnalysisResult(null);
-
     setError("");
-
     setSuccessMessage("");
-  };
 
+    // Reset file input
+    const input = document.getElementById("video-upload");
+
+    if (input) {
+      input.value = "";
+    }
+  };
 
   // ============================================================
   // ANALYZE VIDEO
   // ============================================================
 
   const handleAnalyzeVideo = async () => {
-
     if (!selectedVideo) {
-
-      setError(
-        "Please select a video first."
-      );
-
+      setError("Please select a video first.");
       return;
     }
 
-
     setAnalyzing(true);
-
     setError("");
-
     setSuccessMessage("");
-
     setAnalysisResult(null);
 
-
     try {
-
       const formData = new FormData();
 
-      formData.append(
-        "video",
-        selectedVideo
-      );
-
+      formData.append("video", selectedVideo);
 
       const response = await fetch(
         `${BACKEND_URL}/analyze-video`,
         {
           method: "POST",
-          body: formData
+          body: formData,
         }
       );
 
-
       const data = await response.json();
 
-
       if (!response.ok || !data.success) {
-
         throw new Error(
-          data.message ||
-          "Video analysis failed."
+          data.message || "Video analysis failed."
         );
       }
 
+      console.log("VIDEO ANALYSIS RESULT:", data);
 
-      setAnalysisResult(
-        data
-      );
-
+      setAnalysisResult(data);
 
       setSuccessMessage(
         "Video analyzed successfully!"
       );
-
-
     } catch (err) {
-
       console.error(
         "Video analysis error:",
         err
       );
 
-
       setError(
         err.message ||
         "Unable to analyze video."
       );
-
-
     } finally {
-
       setAnalyzing(false);
     }
   };
 
-
   // ============================================================
-  // FORMAT EMOTION NAME
+  // EMOTION EMOJI
   // ============================================================
 
   const getEmotionEmoji = (emotion) => {
-
     switch (emotion) {
-
       case "Happy":
         return "😊";
 
@@ -249,13 +169,11 @@ function RecordedVideo() {
     }
   };
 
-
   // ============================================================
   // RENDER
   // ============================================================
 
   return (
-
     <div className="recorded-video-page">
 
       <div className="recorded-video-container">
@@ -278,7 +196,7 @@ function RecordedVideo() {
 
             <p className="page-description">
               Upload a classroom recording and let AI
-              analyze people, faces and emotions.
+              analyze faces and emotions.
             </p>
 
           </div>
@@ -305,14 +223,12 @@ function RecordedVideo() {
             for AI analysis.
           </p>
 
-
           <label
             className="upload-button"
             htmlFor="video-upload"
           >
             Select Video
           </label>
-
 
           <input
             id="video-upload"
@@ -360,10 +276,9 @@ function RecordedVideo() {
             {selectedVideo && (
 
               <p className="file-name">
-
                 {selectedVideo.name}
-
               </p>
+
             )}
 
 
@@ -423,6 +338,7 @@ function RecordedVideo() {
             </span>
 
           </div>
+
         )}
 
 
@@ -443,6 +359,7 @@ function RecordedVideo() {
             </p>
 
           </div>
+
         )}
 
 
@@ -463,6 +380,7 @@ function RecordedVideo() {
             </p>
 
           </div>
+
         )}
 
 
@@ -473,6 +391,8 @@ function RecordedVideo() {
         {analysisResult && (
 
           <div className="result-card">
+
+            {/* RESULT HEADER */}
 
             <div className="result-header">
 
@@ -488,106 +408,21 @@ function RecordedVideo() {
 
 
             {/* ================================================== */}
-            {/* BASIC VIDEO INFORMATION */}
+            {/* TOTAL FACES DETECTED */}
             {/* ================================================== */}
 
             <div className="result-list">
 
-              <div className="result-row">
+              <div className="result-row highlight-row">
 
                 <strong>
-                  Video Duration:
+                  Total Faces Detected:
                 </strong>
 
                 <span>
-                  {analysisResult.duration_seconds}
-                  {" "}
-                  seconds
-                </span>
-
-              </div>
-
-
-              <div className="result-row">
-
-                <strong>
-                  Total Frames:
-                </strong>
-
-                <span>
-                  {analysisResult.total_frames}
-                </span>
-
-              </div>
-
-
-              <div className="result-row">
-
-                <strong>
-                  Processed Frames:
-                </strong>
-
-                <span>
-                  {analysisResult.processed_frames}
-                </span>
-
-              </div>
-
-
-              {/* IMPORTANT */}
-             <div className="result-row highlight-row">
-
-  <strong>
-    Unique Persons Detected:
-  </strong>
-
-  <span>
-    {Number(
-      analysisResult.unique_persons_detected ??
-      analysisResult.unique_persons ??
-      analysisResult.total_persons ??
-      0
-    )}
-  </span>
-
-</div>
-
-
-              {/* FACE DETECTIONS */}
-              <div className="result-row">
-
-  <strong>
-    Face Detections:
-  </strong>
-
-  <span>
-    {Number(
-      analysisResult.face_detections ??
-      analysisResult.total_faces_detected ??
-      analysisResult.faces_detected ??
-      0
-    )}
-  </span>
-
-</div>
-
-              {/* MOST COMMON EMOTION */}
-              <div className="result-row emotion-result-row">
-
-                <strong>
-                  Most Common Emotion:
-                </strong>
-
-                <span className="main-emotion">
-
-                  <span className="emotion-big-emoji">
-                    {getEmotionEmoji(
-                      analysisResult.most_common_emotion
-                    )}
-                  </span>
-
-                  {analysisResult.most_common_emotion}
-
+                  {Number(
+                    analysisResult.total_faces_detected ?? 0
+                  )}
                 </span>
 
               </div>
@@ -596,59 +431,66 @@ function RecordedVideo() {
 
 
             {/* ================================================== */}
-            {/* EMOTION COUNTS */}
+            {/* FACE-WISE EMOTION ANALYSIS */}
             {/* ================================================== */}
 
-            <div className="emotion-section">
+            <div className="person-section">
 
               <h3>
-                Emotion Counts
+                Face-wise Emotion Analysis
               </h3>
 
 
-              {analysisResult.emotion_counts &&
-              Object.keys(
-                analysisResult.emotion_counts
-              ).length > 0 ? (
+              {Array.isArray(
+                analysisResult.person_summary
+              ) &&
+              analysisResult.person_summary.length > 0 ? (
 
-                <div className="emotion-grid">
+                <div className="person-grid">
 
-                  {Object.entries(
-                    analysisResult.emotion_counts
-                  ).map(
-                    (
-                      [
-                        emotion,
-                        count
-                      ]
-                    ) => (
+                  {analysisResult.person_summary.map(
+                    (person) => (
 
                       <div
-                        className="emotion-box"
-                        key={emotion}
+                        className="person-card"
+                        key={person.person_id}
                       >
 
-                        <div className="emotion-box-icon">
+                        {/* FACE NUMBER */}
 
-                          {getEmotionEmoji(
-                            emotion
-                          )}
+                        <div className="person-title">
+
+                          <span>
+                            👤
+                          </span>
+
+                          <strong>
+                            Face {person.person_id}
+                          </strong>
 
                         </div>
 
-                        <div>
 
-                          <span className="emotion-name">
+                        {/* EMOTION */}
 
-                            {emotion}
+                        <div className="person-emotion">
 
+                          <span>
+                            Overall Emotion
                           </span>
 
-                          <span className="emotion-count">
+                          <strong>
 
-                            {count}
+                            {getEmotionEmoji(
+                              person.most_common_emotion
+                            )}
 
-                          </span>
+                            {" "}
+
+                            {person.most_common_emotion ||
+                              "Unknown"}
+
+                          </strong>
 
                         </div>
 
@@ -661,93 +503,18 @@ function RecordedVideo() {
 
               ) : (
 
-                <p className="no-data">
-                  No emotions detected.
-                </p>
+                <div className="no-data">
+
+                  <p>
+                    No faces were detected in
+                    this video.
+                  </p>
+
+                </div>
 
               )}
 
             </div>
-
-
-            {/* ================================================== */}
-            {/* PERSON SUMMARY */}
-            {/* ================================================== */}
-
-            {analysisResult.person_summary &&
-            analysisResult.person_summary.length > 0 && (
-
-              <div className="person-section">
-
-                <h3>
-                  Person-wise Analysis
-                </h3>
-
-
-                <div className="person-grid">
-
-                  {analysisResult.person_summary.map(
-                    (person) => (
-
-                      <div
-                        className="person-card"
-                        key={person.person_id}
-                      >
-
-                        <div className="person-title">
-
-                          <span>
-                            👤
-                          </span>
-
-                          <strong>
-                            Person {person.person_id}
-                          </strong>
-
-                        </div>
-
-
-                        <div className="person-emotion">
-
-                          <span>
-                            Main Emotion
-                          </span>
-
-                          <strong>
-
-                            {getEmotionEmoji(
-                              person.most_common_emotion
-                            )}
-
-                            {" "}
-
-                            {person.most_common_emotion}
-
-                          </strong>
-
-                        </div>
-
-
-                        <div className="person-samples">
-
-                          Samples analyzed:
-
-                          {" "}
-
-                          {person.samples_analyzed}
-
-                        </div>
-
-                      </div>
-
-                    )
-                  )}
-
-                </div>
-
-              </div>
-
-            )}
 
           </div>
 
