@@ -25,7 +25,7 @@ CORS(app)
 
 MONGO_URI = os.environ.get(
     "MONGO_URI",
-    "YOUR_MONGODB_CONNECTION_STRING"
+    "mongodb+srv://sushant:hfPHrjIvmGtWbvCt@cluster0.yfd6kld.mongodb.net/"
 )
 
 client = MongoClient(MONGO_URI)
@@ -59,7 +59,6 @@ ai_running = False
 
 AI_INTERVAL = 0.5
 
-
 # ============================================================
 # EYE STATE TRACKING
 # ============================================================
@@ -76,13 +75,10 @@ SLEEPING_THRESHOLD = 3.0
 # How long Blink remains displayed after reopening
 BLINK_DISPLAY_DURATION = 0.5
 
-# Store tracking information for each detected face
+# Eye state information for each YOLO/ByteTrack person ID
 eye_tracks = {}
 
 eye_tracks_lock = threading.Lock()
-
-next_track_id = 0
-
 
 # ============================================================
 # LOAD YOLO MODEL
@@ -446,26 +442,38 @@ def get_eye_track_id(
 # CONVERT RAW EYE STATE TO DISPLAY STATE
 # ============================================================
 
-def update_eye_display_state(
-    track_id,
-    raw_state
-):
+# ============================================================
+# CONVERT RAW EYE STATE TO DISPLAY STATE
+# ============================================================
+
+def update_eye_display_state(track_id, raw_state):
 
     current_time = time.time()
 
+    if track_id is None:
+        return "Unknown"
+
     with eye_tracks_lock:
+
+        # ----------------------------------------------------
+        # Create eye tracking data for a new YOLO person ID
+        # ----------------------------------------------------
 
         if track_id not in eye_tracks:
 
-            return raw_state
+            eye_tracks[track_id] = {
+                "previous_raw_state": "Unknown",
+                "closed_since": None,
+                "blink_until": 0,
+                "was_sleeping": False,
+                "last_seen": current_time
+            }
 
-        track = eye_tracks[
-            track_id
-        ]
+        track = eye_tracks[track_id]
 
-        previous_state = (
-            track["previous_raw_state"]
-        )
+        track["last_seen"] = current_time
+
+        previous_state = track["previous_raw_state"]
 
         # ====================================================
         # EYES CLOSED
@@ -473,52 +481,46 @@ def update_eye_display_state(
 
         if raw_state == "Close":
 
-            # Eyes have just closed
+            # Eyes have just changed from Open/Unknown to Close
             if previous_state != "Close":
 
-                track["closed_since"] = (
-                    current_time
-                )
+                track["closed_since"] = current_time
 
             if track["closed_since"] is not None:
 
                 closed_duration = (
                     current_time
-                    -
-                    track["closed_since"]
+                    - track["closed_since"]
                 )
 
             else:
 
                 closed_duration = 0
 
-            track[
-                "previous_raw_state"
-            ] = "Close"
+            track["previous_raw_state"] = "Close"
 
-            # More than 3 seconds
-            if (
-                closed_duration
-                >=
-                SLEEPING_THRESHOLD
-            ):
+            # ------------------------------------------------
+            # Sleeping
+            # ------------------------------------------------
 
-                track[
-                    "was_sleeping"
-                ] = True
+            if closed_duration >= SLEEPING_THRESHOLD:
+
+                track["was_sleeping"] = True
 
                 return "Sleeping"
 
-            # 0.8 - 3 seconds
-            elif (
-                closed_duration
-                >=
-                BLINK_MAX_DURATION
-            ):
+            # ------------------------------------------------
+            # Drowsy
+            # ------------------------------------------------
+
+            elif closed_duration >= BLINK_MAX_DURATION:
 
                 return "Drowsy"
 
-            # Less than 0.8 seconds
+            # ------------------------------------------------
+            # Short eye closure
+            # ------------------------------------------------
+
             else:
 
                 return "Close"
@@ -531,51 +533,40 @@ def update_eye_display_state(
 
             closed_duration = 0
 
-            if (
-                track["closed_since"]
-                is not None
-            ):
+            if track["closed_since"] is not None:
 
                 closed_duration = (
                     current_time
-                    -
-                    track["closed_since"]
+                    - track["closed_since"]
                 )
 
-            track[
-                "previous_raw_state"
-            ] = "Open"
+            track["previous_raw_state"] = "Open"
 
-            track[
-                "closed_since"
-            ] = None
+            track["closed_since"] = None
 
-            # If person was sleeping,
-            # reopening = Open
+            # ------------------------------------------------
+            # Person was sleeping and opened eyes
+            # ------------------------------------------------
+
             if track["was_sleeping"]:
 
-                track[
-                    "was_sleeping"
-                ] = False
+                track["was_sleeping"] = False
 
-                track[
-                    "blink_until"
-                ] = 0
+                track["blink_until"] = 0
 
                 return "Open"
 
+            # ------------------------------------------------
             # Quick close + reopen = Blink
+            # ------------------------------------------------
+
             if (
                 closed_duration > 0
                 and
-                closed_duration
-                <
-                BLINK_MAX_DURATION
+                closed_duration < BLINK_MAX_DURATION
             ):
 
-                track[
-                    "blink_until"
-                ] = (
+                track["blink_until"] = (
                     current_time
                     +
                     BLINK_DISPLAY_DURATION
@@ -583,12 +574,11 @@ def update_eye_display_state(
 
                 return "Blink"
 
+            # ------------------------------------------------
             # Keep Blink visible briefly
-            if (
-                current_time
-                <
-                track["blink_until"]
-            ):
+            # ------------------------------------------------
+
+            if current_time < track["blink_until"]:
 
                 return "Blink"
 
@@ -617,11 +607,13 @@ def process_frame(frame):
         # 1. YOLO PERSON DETECTION
         # ====================================================
 
-        yolo_results = yolo_model(
-            frame,
-            classes=[0],
-            conf=0.40,
-            verbose=False
+        yolo_results = yolo_model.track(
+        frame,
+        persist=True,
+        tracker="bytetrack.yaml",
+        classes=[0],
+        conf=0.40,
+        verbose=False
         )
 
         # ====================================================
@@ -634,6 +626,12 @@ def process_frame(frame):
                 int,
                 box.xyxy[0].tolist()
             )
+            
+            # Get YOLO tracking ID
+            if box.id is not None:
+                person_track_id = int(box.id[0])
+            else:
+                person_track_id = None
 
             x1 = max(0, x1)
             y1 = max(0, y1)
@@ -672,6 +670,19 @@ def process_frame(frame):
                 minNeighbors=5,
                 minSize=(50, 50)
             )
+            
+            # =================================================
+            # KEEP ONLY THE LARGEST FACE FOR EACH PERSON
+            # =================================================
+
+            if len(faces) > 0:
+
+                largest_face = max(
+                    faces,
+                    key=lambda face: face[2] * face[3]
+                )
+
+                faces = [largest_face]
 
             # =================================================
             # 4. PROCESS EACH FACE
@@ -943,10 +954,7 @@ def process_frame(frame):
                     # 9. TRACK THIS FACE
                     # =================================================
 
-                    track_id = get_eye_track_id(
-                        face_center_x,
-                        face_center_y
-                    )
+                    track_id = person_track_id
 
                     # =================================================
                     # 10. CONVERT TO DISPLAY STATE
@@ -959,9 +967,9 @@ def process_frame(frame):
                         )
                     )
                     print(
-    f"Track {track_id} | Raw Eye: {raw_eye_state} | "
-    f"Display Eye: {eye_state}"
-)
+                        f"Track {track_id} | Raw Eye: {raw_eye_state} | "
+                        f"Display Eye: {eye_state}"
+                    )
 
                 else:
 
@@ -981,6 +989,8 @@ def process_frame(frame):
                 # =================================================
 
                 result = {
+                    
+                    "person_id": person_track_id,
 
                     "emotion": emotion,
 
@@ -1066,10 +1076,21 @@ def process_frame(frame):
                 # 15. DISPLAY EMOTION
                 # =================================================
 
-                text = (
-                    f"{emotion}: "
-                    f"{confidence:.1f}%"
-                )
+                if person_track_id is not None:
+
+                    text = (
+                        f"S{person_track_id} | "
+                        f"{emotion}: "
+                        f"{confidence:.1f}%"
+                    )
+
+                else:
+
+                    text = (
+                        f"Person | "
+                        f"{emotion}: "
+                        f"{confidence:.1f}%"
+                    )
 
                 eye_text = (
                     f"Eyes: "
@@ -1128,7 +1149,7 @@ def process_frame(frame):
 
             cv2.putText(
                 frame,
-                "Person",
+                f"S{person_track_id}",
                 (
                     x1,
                     max(
