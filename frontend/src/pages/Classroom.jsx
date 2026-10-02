@@ -16,7 +16,7 @@ function Classroom() {
   // CAMERA
   // =========================
 
-  const [cameraMode, setCameraMode] = useState("webcam");
+  const [cameraMode, setCameraMode] = useState("webcam"); // "webcam" | "phone"
   const [webcamIndex, setWebcamIndex] = useState(0);
   const [activeCameraType, setActiveCameraType] = useState("none");
   const [cameraUrl, setCameraUrl] = useState("");
@@ -32,30 +32,19 @@ function Classroom() {
   const [emotion, setEmotion] = useState("Waiting...");
   const [emotionConfidence, setEmotionConfidence] = useState(0);
   const [facesDetected, setFacesDetected] = useState(0);
-
-  // Stores ALL currently detected faces
   const [liveFaces, setLiveFaces] = useState([]);
 
-  // =========================
-  // CAMERA STATUS
-  // =========================
-
+  // Check camera status on mount
   useEffect(() => {
     const checkCameraStatus = async () => {
       try {
-        const response = await fetch(
-          `${BACKEND_URL}/camera/status`
-        );
-
+        const response = await fetch(`${BACKEND_URL}/camera/status`);
         if (!response.ok) return;
-
         const data = await response.json();
-
         if (data.connected) {
           setCameraConnected(true);
           setCameraOn(true);
           setActiveCameraType(data.type || "phone");
-
           if (data.type === "webcam") {
             setCameraMode("webcam");
             setWebcamIndex(Number(data.source) || 0);
@@ -64,7 +53,7 @@ function Classroom() {
           }
         }
       } catch (err) {
-        // Backend may not be running yet
+        // Backend not ready or offline
       }
     };
 
@@ -77,7 +66,6 @@ function Classroom() {
 
   const connectCamera = async (modeOverride) => {
     const mode = modeOverride || cameraMode;
-
     setCameraError("");
 
     let payload = {};
@@ -89,16 +77,13 @@ function Classroom() {
       };
     } else {
       const rawUrl = cameraUrl.trim();
-
       if (!rawUrl) {
-        setCameraError(
-          "Please enter phone camera IP or URL"
-        );
+        setCameraError("Please enter phone camera IP or URL");
         return;
       }
 
       let formattedUrl = rawUrl;
-
+      // If user typed only IP or IP:port without http://
       if (
         !formattedUrl.startsWith("http://") &&
         !formattedUrl.startsWith("https://") &&
@@ -142,11 +127,9 @@ function Classroom() {
       setCameraConnected(true);
       setCameraOn(true);
       setActiveCameraType(data.type || mode);
+
     } catch (error) {
-      console.error(
-        "Camera connection error:",
-        error
-      );
+      console.error("Camera connection error:", error);
 
       setCameraConnected(false);
       setCameraOn(false);
@@ -155,6 +138,7 @@ function Classroom() {
       setCameraError(
         error.message || "Unable to connect camera"
       );
+
     } finally {
       setCameraLoading(false);
     }
@@ -198,14 +182,11 @@ function Classroom() {
   };
 
   // =========================
-  // GET LIVE AI RESULTS
+  // GET EMOTION RESULTS
   // =========================
 
   useEffect(() => {
-    if (!cameraOn) {
-      setLiveFaces([]);
-      return;
-    }
+    if (!cameraOn) return;
 
     const getEmotionResults = async () => {
       try {
@@ -226,15 +207,11 @@ function Classroom() {
             ? data.faces
             : [];
 
-          // Save ALL detected faces
           setLiveFaces(faces);
-
           setFacesDetected(
-            Number(data.faces_detected) ||
-              faces.length
+            Number(data.faces_detected) || faces.length
           );
 
-          // Existing main emotion display
           if (faces.length > 0) {
             const face = faces[0];
 
@@ -250,6 +227,7 @@ function Classroom() {
             setEmotionConfidence(0);
           }
         }
+
       } catch (error) {
         console.error(
           "Emotion results error:",
@@ -258,7 +236,6 @@ function Classroom() {
 
         setEmotion("Connection error");
         setEmotionConfidence(0);
-        setLiveFaces([]);
       }
     };
 
@@ -272,197 +249,62 @@ function Classroom() {
     return () => {
       clearInterval(interval);
     };
+
   }, [cameraOn]);
 
+
   // =========================
-  // REAL-TIME ENGAGEMENT METRICS
-  // =========================
-  //
-  // These are calculated from:
-  // - FER2013 emotion
-  // - MRL eye state
-  // - detected faces
-  //
-  // They are project-level AI indicators,
-  // not the paper's exact engagement model.
+  // INDIVIDUAL ENGAGEMENT
   // =========================
 
-  const liveMetrics = useMemo(() => {
-    const faces = Array.isArray(liveFaces)
-      ? liveFaces
-      : [];
+  const getIndividualEngagement = (face) => {
+    if (!face) return 0;
 
-    if (faces.length === 0) {
+    const emotionName = String(face.emotion || "").toLowerCase();
+    const eyeState = String(face.eye_state || "").toLowerCase();
+    const emotionConfidence = Math.max(0, Math.min(100, Number(face.confidence) || 0));
+    const eyeConfidence = Math.max(0, Math.min(100, Number(face.eye_confidence) || 0));
+
+    let score = 50;
+
+    if (eyeState === "open") score += 25;
+    else if (eyeState === "blink") score += 18;
+    else if (eyeState === "close") score -= 20;
+    else if (eyeState === "drowsy") score -= 30;
+    else if (eyeState === "sleeping") score -= 40;
+
+    if (emotionName === "happy") score += 15;
+    else if (emotionName === "neutral") score += 10;
+    else if (emotionName === "surprise") score += 3;
+    else if (emotionName === "fear" || emotionName === "angry") score -= 5;
+    else if (emotionName === "sad") score -= 12;
+    else if (emotionName === "disgust") score -= 8;
+
+    const confidenceBonus = ((emotionConfidence + eyeConfidence) / 2 - 50) * 0.10;
+    score += confidenceBonus;
+
+    return Math.round(Math.max(0, Math.min(100, score)));
+  };
+
+  const getIndividualStatus = (score) => {
+    if (score >= 75) return "Engaged";
+    if (score >= 50) return "Moderate";
+    return "Low";
+  };
+
+  const individualStudents = useMemo(() => {
+    return (Array.isArray(liveFaces) ? liveFaces : []).map((face, index) => {
+      const score = getIndividualEngagement(face);
       return {
-        engagement: 0,
-        attention: 0,
-        participation: 0,
-        positiveMood: 0,
-        focusedStudents: 0,
-        participatingStudents: 0,
-        confusedStudents: 0,
+        id: index + 1,
+        emotion: face.emotion || "Unknown",
+        eyeState: face.eye_state || "Unknown",
+        confidence: Number(face.confidence) || 0,
+        eyeConfidence: Number(face.eye_confidence) || 0,
+        engagement: score,
+        status: getIndividualStatus(score),
       };
-    }
-
-    // -------------------------
-    // ON-TASK PROXY
-    // -------------------------
-    //
-    // Open / Blink = attention available
-    //
-    const onTaskStudents = faces.filter(
-      (face) =>
-        face.eye_state === "Open" ||
-        face.eye_state === "Blink"
-    );
-
-    // -------------------------
-    // OFF-TASK / LOW ATTENTION
-    // -------------------------
-
-    const offTaskStudents = faces.filter(
-      (face) =>
-        face.eye_state === "Close" ||
-        face.eye_state === "Drowsy" ||
-        face.eye_state === "Sleeping"
-    );
-
-    // -------------------------
-    // SATISFIED / POSITIVE MOOD
-    // -------------------------
-    //
-    // Happy + Neutral are used as
-    // positive/satisfied proxies.
-    //
-
-    const satisfiedStudents = faces.filter(
-      (face) =>
-        face.emotion === "Happy" ||
-        face.emotion === "Neutral"
-    );
-
-    // -------------------------
-    // CONFUSION PROXY
-    // -------------------------
-    //
-    // Fear / Angry can indicate
-    // frustration or confusion.
-    //
-    // This is a heuristic because
-    // FER2013 does not directly
-    // contain a "Confused" class.
-    //
-
-    const confusedStudents = faces.filter(
-      (face) =>
-        face.emotion === "Fear" ||
-        face.emotion === "Angry"
-    );
-
-    // -------------------------
-    // BOREDOM PROXY
-    // -------------------------
-    //
-    // Sad is used as a possible
-    // disengagement/boredom signal.
-    //
-
-    const boredStudents = faces.filter(
-      (face) =>
-        face.emotion === "Sad"
-    );
-
-    // -------------------------
-    // ENGAGED STUDENTS
-    // -------------------------
-    //
-    // Paper structure:
-    //
-    // On-task + Satisfied = Engaged
-    // On-task + Confused = Engaged
-    //
-    // We use our FER + eye-state
-    // categories as proxies.
-    //
-
-    const engagedStudents = faces.filter(
-      (face) => {
-        const onTask =
-          face.eye_state === "Open" ||
-          face.eye_state === "Blink";
-
-        const satisfied =
-          face.emotion === "Happy" ||
-          face.emotion === "Neutral";
-
-        const confused =
-          face.emotion === "Fear" ||
-          face.emotion === "Angry";
-
-        const bored =
-          face.emotion === "Sad";
-
-        if (!onTask) {
-          return false;
-        }
-
-        if (bored) {
-          return false;
-        }
-
-        return satisfied || confused;
-      }
-    );
-
-    // -------------------------
-    // PERCENTAGES
-    // -------------------------
-
-    const attention = Math.round(
-      (onTaskStudents.length / faces.length) *
-        100
-    );
-
-    const engagement = Math.round(
-      (engagedStudents.length / faces.length) *
-        100
-    );
-
-    const positiveMood = Math.round(
-      (satisfiedStudents.length / faces.length) *
-        100
-    );
-
-    // Participation is currently an
-    // engagement-based proxy because
-    // backend does not yet detect
-    // actual hand raising/speaking.
-    const participation = Math.round(
-      (engagedStudents.length / faces.length) *
-        100
-    );
-
-    return {
-      engagement,
-      attention,
-      participation,
-      positiveMood,
-
-      focusedStudents:
-        onTaskStudents.length,
-
-      participatingStudents:
-        engagedStudents.length,
-
-      confusedStudents:
-        confusedStudents.length,
-
-      offTaskStudents:
-        offTaskStudents.length,
-
-      boredStudents:
-        boredStudents.length,
-    };
+    });
   }, [liveFaces]);
 
   // =========================
@@ -470,7 +312,9 @@ function Classroom() {
   // =========================
 
   const getEmotionEmoji = () => {
+
     switch (emotion?.toLowerCase()) {
+
       case "happy":
         return "😊";
 
@@ -496,6 +340,7 @@ function Classroom() {
         return "🤖";
     }
   };
+
 
   // =========================
   // RETURN UI
@@ -534,6 +379,7 @@ function Classroom() {
         </div>
 
       </nav>
+
 
       {/* =========================
           MAIN CONTENT
@@ -574,6 +420,7 @@ function Classroom() {
 
         </div>
 
+
         {/* =========================
             CAMERA CONNECTION
         ========================= */}
@@ -581,231 +428,142 @@ function Classroom() {
         <section className="camera-connection-panel">
 
           <div className="camera-panel-top">
-
             <div>
-
-              <h3>
-                Connect Classroom Camera
-              </h3>
-
+              <h3>Connect Classroom Camera</h3>
               <p>
                 Choose between your laptop/PC webcam or stream from a mobile phone via IP Webcam.
               </p>
-
             </div>
 
+            {/* Mode Switcher Tabs */}
             <div className="camera-mode-tabs">
-
               <button
                 type="button"
-                className={`camera-mode-tab ${
-                  cameraMode === "webcam"
-                    ? "active"
-                    : ""
-                }`}
+                className={`camera-mode-tab ${cameraMode === "webcam" ? "active" : ""}`}
                 onClick={() => {
                   if (!cameraConnected) {
                     setCameraMode("webcam");
                     setCameraError("");
                   }
                 }}
-                disabled={
-                  cameraConnected ||
-                  cameraLoading
-                }
+                disabled={cameraConnected || cameraLoading}
               >
                 💻 Laptop / PC Webcam
               </button>
 
               <button
                 type="button"
-                className={`camera-mode-tab ${
-                  cameraMode === "phone"
-                    ? "active"
-                    : ""
-                }`}
+                className={`camera-mode-tab ${cameraMode === "phone" ? "active" : ""}`}
                 onClick={() => {
                   if (!cameraConnected) {
                     setCameraMode("phone");
                     setCameraError("");
                   }
                 }}
-                disabled={
-                  cameraConnected ||
-                  cameraLoading
-                }
+                disabled={cameraConnected || cameraLoading}
               >
                 📱 Phone Camera (IP)
               </button>
-
             </div>
-
           </div>
 
-          {/* WEBCAM MODE */}
-
+          {/* WEBCAM MODE CONTROLS */}
           {cameraMode === "webcam" && (
-
             <div className="camera-controls-wrapper">
-
               <div className="camera-webcam-row">
-
                 <div className="camera-select-field">
-
-                  <label htmlFor="webcam-select">
-                    Camera Device:
-                  </label>
-
+                  <label htmlFor="webcam-select">Camera Device:</label>
                   <select
                     id="webcam-select"
                     value={webcamIndex}
-                    onChange={(e) =>
-                      setWebcamIndex(
-                        e.target.value
-                      )
-                    }
-                    disabled={
-                      cameraLoading ||
-                      cameraConnected
-                    }
+                    onChange={(e) => setWebcamIndex(e.target.value)}
+                    disabled={cameraLoading || cameraConnected}
                   >
-
-                    <option value="0">
-                      Camera 0 (Default Built-in Webcam)
-                    </option>
-
-                    <option value="1">
-                      Camera 1 (Secondary / External USB)
-                    </option>
-
-                    <option value="2">
-                      Camera 2 (External Camera 2)
-                    </option>
-
+                    <option value="0">Camera 0 (Default Built-in Webcam)</option>
+                    <option value="1">Camera 1 (Secondary / External USB)</option>
+                    <option value="2">Camera 2 (External Camera 2)</option>
                   </select>
-
                 </div>
 
                 {!cameraConnected ? (
-
                   <button
                     className="camera-action-btn"
-                    onClick={() =>
-                      connectCamera("webcam")
-                    }
+                    onClick={() => connectCamera("webcam")}
                     disabled={cameraLoading}
                   >
-                    {cameraLoading
-                      ? "Starting Webcam..."
-                      : "Start Laptop Webcam"}
+                    {cameraLoading ? "Starting Webcam..." : "Start Laptop Webcam"}
                   </button>
-
                 ) : (
-
                   <button
                     className="camera-action-btn disconnect"
                     onClick={disconnectCamera}
                   >
                     Disconnect
                   </button>
-
                 )}
-
               </div>
-
               <small className="camera-hint">
                 💡 Tip: Uses your built-in PC/laptop webcam directly. Ensure other apps (Zoom, Teams) aren't locking the camera.
               </small>
-
             </div>
-
           )}
 
-          {/* PHONE MODE */}
-
+          {/* PHONE CAMERA MODE CONTROLS */}
           {cameraMode === "phone" && (
-
             <div className="camera-controls-wrapper">
-
               <div className="camera-url-row">
-
                 <input
                   type="text"
                   value={cameraUrl}
-                  onChange={(e) =>
-                    setCameraUrl(e.target.value)
-                  }
+                  onChange={(e) => setCameraUrl(e.target.value)}
                   placeholder="Enter phone IP (e.g. 192.168.1.15) or full video URL"
-                  disabled={
-                    cameraLoading ||
-                    cameraConnected
-                  }
+                  disabled={cameraLoading || cameraConnected}
                 />
 
                 {!cameraConnected ? (
-
                   <button
                     className="camera-action-btn"
-                    onClick={() =>
-                      connectCamera("phone")
-                    }
+                    onClick={() => connectCamera("phone")}
                     disabled={cameraLoading}
                   >
-                    {cameraLoading
-                      ? "Connecting..."
-                      : "Connect Phone Camera"}
+                    {cameraLoading ? "Connecting..." : "Connect Phone Camera"}
                   </button>
-
                 ) : (
-
                   <button
                     className="camera-action-btn disconnect"
                     onClick={disconnectCamera}
                   >
                     Disconnect
                   </button>
-
                 )}
-
               </div>
-
               <small className="camera-hint">
                 💡 Tip: Open the <b>IP Webcam</b> app on Android/iOS, tap "Start server", and enter the displayed IP address.
               </small>
-
             </div>
-
           )}
 
           {cameraError && (
-
             <p className="camera-error">
               ⚠️ {cameraError}
             </p>
-
           )}
 
           {cameraConnected && (
-
             <p className="camera-success">
-
-              ✓{" "}
-              {activeCameraType === "webcam"
-                ? "Laptop / PC Webcam"
-                : "Phone Camera"}{" "}
-              connected and streaming live
-
+              ✓ {activeCameraType === "webcam" ? "Laptop / PC Webcam" : "Phone Camera"} connected and streaming live
             </p>
-
           )}
 
         </section>
+
 
         {/* =========================
             CAMERA + ENGAGEMENT
         ========================= */}
 
         <div className="classroom-grid">
+
 
           {/* =========================
               CAMERA CARD
@@ -839,6 +597,7 @@ function Classroom() {
 
             </div>
 
+
             {/* CAMERA BOX */}
 
             <div className="camera-box">
@@ -853,7 +612,10 @@ function Classroom() {
                     className="classroom-video"
                   />
 
-                  {/* FER OVERLAY */}
+
+                  {/* =========================
+                      FER EMOTION OVERLAY
+                  ========================= */}
 
                   <div className="emotion-overlay">
 
@@ -895,6 +657,7 @@ function Classroom() {
 
                   </div>
 
+
                   {/* STOP CAMERA */}
 
                   <button
@@ -911,27 +674,17 @@ function Classroom() {
                 <div className="camera-placeholder">
 
                   <div className="camera-icon">
-
-                    {cameraMode === "webcam"
-                      ? "💻"
-                      : "📱"}
-
+                    {cameraMode === "webcam" ? "💻" : "📱"}
                   </div>
 
                   <h3>
-
-                    {cameraMode === "webcam"
-                      ? "Laptop / PC Webcam"
-                      : "Mobile IP Camera"}
-
+                    {cameraMode === "webcam" ? "Laptop / PC Webcam" : "Mobile IP Camera"}
                   </h3>
 
                   <p>
-
                     {cameraMode === "webcam"
                       ? "Click 'Start Laptop Webcam' above to begin monitoring with your computer camera."
                       : "Connect your mobile IP Webcam above to begin classroom monitoring."}
-
                   </p>
 
                 </div>
@@ -941,6 +694,7 @@ function Classroom() {
             </div>
 
           </section>
+
 
           {/* =========================
               ENGAGEMENT CARD
@@ -968,12 +722,20 @@ function Classroom() {
 
             </div>
 
-            {/* OVERALL ENGAGEMENT */}
+
+            {/* SCORE */}
 
             <div className="engagement-score">
 
               <strong>
-                {liveMetrics.engagement}%
+                {individualStudents.length > 0
+                  ? Math.round(
+                      individualStudents.reduce(
+                        (sum, student) => sum + student.engagement,
+                        0
+                      ) / individualStudents.length
+                    )
+                  : 0}%
               </strong>
 
               <span>
@@ -981,6 +743,7 @@ function Classroom() {
               </span>
 
             </div>
+
 
             {/* ATTENTION */}
 
@@ -993,7 +756,13 @@ function Classroom() {
                 </span>
 
                 <strong>
-                  {liveMetrics.attention}%
+                  {individualStudents.length > 0
+                    ? Math.round(
+                        individualStudents.filter(
+                          (student) => student.eyeState === "Open" || student.eyeState === "Blink"
+                        ).length / individualStudents.length * 100
+                      )
+                    : 0}%
                 </strong>
 
               </div>
@@ -1002,13 +771,20 @@ function Classroom() {
 
                 <div
                   style={{
-                    width: `${liveMetrics.attention}%`,
+                    width: `${individualStudents.length > 0
+                      ? Math.round(
+                          individualStudents.filter(
+                            (student) => student.eyeState === "Open" || student.eyeState === "Blink"
+                          ).length / individualStudents.length * 100
+                        )
+                      : 0}%`,
                   }}
                 ></div>
 
               </div>
 
             </div>
+
 
             {/* PARTICIPATION */}
 
@@ -1021,7 +797,13 @@ function Classroom() {
                 </span>
 
                 <strong>
-                  {liveMetrics.participation}%
+                  {individualStudents.length > 0
+                    ? Math.round(
+                        individualStudents.filter(
+                          (student) => student.engagement >= 75
+                        ).length / individualStudents.length * 100
+                      )
+                    : 0}%
                 </strong>
 
               </div>
@@ -1030,13 +812,20 @@ function Classroom() {
 
                 <div
                   style={{
-                    width: `${liveMetrics.participation}%`,
+                    width: `${individualStudents.length > 0
+                      ? Math.round(
+                          individualStudents.filter(
+                            (student) => student.engagement >= 75
+                          ).length / individualStudents.length * 100
+                        )
+                      : 0}%`,
                   }}
                 ></div>
 
               </div>
 
             </div>
+
 
             {/* POSITIVE MOOD */}
 
@@ -1049,7 +838,13 @@ function Classroom() {
                 </span>
 
                 <strong>
-                  {liveMetrics.positiveMood}%
+                  {individualStudents.length > 0
+                    ? Math.round(
+                        individualStudents.filter(
+                          (student) => student.emotion === "Happy" || student.emotion === "Neutral"
+                        ).length / individualStudents.length * 100
+                      )
+                    : 0}%
                 </strong>
 
               </div>
@@ -1058,7 +853,13 @@ function Classroom() {
 
                 <div
                   style={{
-                    width: `${liveMetrics.positiveMood}%`,
+                    width: `${individualStudents.length > 0
+                      ? Math.round(
+                          individualStudents.filter(
+                            (student) => student.emotion === "Happy" || student.emotion === "Neutral"
+                          ).length / individualStudents.length * 100
+                        )
+                      : 0}%`,
                   }}
                 ></div>
 
@@ -1070,13 +871,12 @@ function Classroom() {
 
         </div>
 
+
         {/* =========================
             STUDENT STATISTICS
         ========================= */}
 
         <section className="classroom-stats">
-
-          {/* STUDENTS DETECTED */}
 
           <div className="classroom-stat">
 
@@ -1098,7 +898,6 @@ function Classroom() {
 
           </div>
 
-          {/* FOCUSED */}
 
           <div className="classroom-stat">
 
@@ -1113,14 +912,15 @@ function Classroom() {
               </small>
 
               <strong>
-                {liveMetrics.focusedStudents}
+                {individualStudents.filter(
+                  (student) => student.eyeState === "Open" || student.eyeState === "Blink"
+                ).length}
               </strong>
 
             </div>
 
           </div>
 
-          {/* PARTICIPATING */}
 
           <div className="classroom-stat">
 
@@ -1135,14 +935,15 @@ function Classroom() {
               </small>
 
               <strong>
-                {liveMetrics.participatingStudents}
+                {individualStudents.filter(
+                  (student) => student.engagement >= 75
+                ).length}
               </strong>
 
             </div>
 
           </div>
 
-          {/* CONFUSED */}
 
           <div className="classroom-stat">
 
@@ -1157,12 +958,117 @@ function Classroom() {
               </small>
 
               <strong>
-                {liveMetrics.confusedStudents}
+                {individualStudents.filter(
+                  (student) => student.emotion === "Fear" || student.emotion === "Angry"
+                ).length}
               </strong>
 
             </div>
 
           </div>
+
+        </section>
+
+
+        {/* =========================
+            INDIVIDUAL STUDENT ENGAGEMENT
+        ========================= */}
+
+        <section className="emotion-card individual-engagement-card">
+
+          <div>
+            <small>
+              INDIVIDUAL ANALYSIS
+            </small>
+
+            <h2>
+              Student Engagement
+            </h2>
+
+            <p>
+              Live engagement indicator for each detected student.
+            </p>
+          </div>
+
+          {individualStudents.length === 0 ? (
+            <div style={{ padding: "24px 0", opacity: 0.7 }}>
+              No students detected yet. Start the classroom camera.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: "16px",
+                marginTop: "20px",
+              }}
+            >
+              {individualStudents.map((student) => (
+                <div
+                  key={student.id}
+                  style={{
+                    padding: "18px",
+                    borderRadius: "14px",
+                    border: "1px solid rgba(128,128,128,0.25)",
+                    background: "rgba(128,128,128,0.06)",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <strong>
+                      Student {student.id}
+                    </strong>
+
+                    <strong>
+                      {student.engagement}%
+                    </strong>
+                  </div>
+
+                  <div
+                    style={{
+                      height: "7px",
+                      borderRadius: "10px",
+                      background: "rgba(128,128,128,0.2)",
+                      overflow: "hidden",
+                      marginBottom: "14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${student.engagement}%`,
+                        height: "100%",
+                        borderRadius: "10px",
+                        background: "currentColor",
+                        transition: "width 0.4s ease",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ marginBottom: "7px" }}>
+                    Emotion: <strong>{student.emotion}</strong>
+                  </div>
+
+                  <div style={{ marginBottom: "7px" }}>
+                    Eyes: <strong>{student.eyeState}</strong>
+                  </div>
+
+                  <div style={{ marginBottom: "7px" }}>
+                    AI Confidence: <strong>{student.confidence.toFixed(1)}%</strong>
+                  </div>
+
+                  <div>
+                    Status: <strong>{student.status}</strong>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
         </section>
 
@@ -1186,8 +1092,6 @@ function Classroom() {
 
           <div className="emotion-list">
 
-            {/* CURRENT EMOTION */}
-
             <div>
 
               <span>
@@ -1204,8 +1108,6 @@ function Classroom() {
 
             </div>
 
-            {/* CONFIDENCE */}
-
             <div>
 
               <span>
@@ -1219,13 +1121,10 @@ function Classroom() {
               <strong>
                 {Number(
                   emotionConfidence
-                ).toFixed(1)}
-                %
+                ).toFixed(1)}%
               </strong>
 
             </div>
-
-            {/* FACES */}
 
             <div>
 
@@ -1247,19 +1146,16 @@ function Classroom() {
 
         </section>
 
+
         {/* =========================
-            ANALYTICS BUTTONS
+            ANALYTICS BUTTON
         ========================= */}
-
         <button
-          className="recorded-video-button"
-          onClick={() =>
-            navigate("/recorded-video")
-          }
-        >
-          Upload Recorded Video →
-        </button>
-
+  className="recorded-video-button"
+  onClick={() => navigate("/recorded-video")}
+>
+  Upload Recorded Video →
+</button>
         <button
           className="analytics-button"
           onClick={() =>
