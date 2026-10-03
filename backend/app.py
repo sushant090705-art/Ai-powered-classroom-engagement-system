@@ -10,12 +10,6 @@ import threading
 import time
 from ultralytics import YOLO
 
-from student_reports import (
-    students_bp,
-    update_student_registry,
-    reset_student_registry
-)
-
 
 # ============================================================
 # FLASK APP
@@ -23,9 +17,6 @@ from student_reports import (
 
 app = Flask(__name__)
 CORS(app)
-
-# Per-student report endpoints (/students/report, ...)
-app.register_blueprint(students_bp)
 
 
 # ============================================================
@@ -63,10 +54,6 @@ frame_lock = threading.Lock()
 latest_results = []
 results_lock = threading.Lock()
 
-# YOLO person boxes (x1, y1, x2, y2) of the last processed frame.
-# Written and read only by the AI thread; used for student reports.
-last_person_boxes = []
-
 ai_thread = None
 ai_running = False
 
@@ -77,17 +64,14 @@ AI_INTERVAL = 0.5
 # EYE STATE TRACKING
 # ============================================================
 
-# Less than this = Blink
 BLINK_MAX_DURATION = 0.8
 
-# 0.8 - 3 seconds = Drowsy
 DROWSY_THRESHOLD = 3.0
 
-# More than 3 seconds = Sleeping
 SLEEPING_THRESHOLD = 3.0
 
-# How long Blink remains displayed after reopening
 BLINK_DISPLAY_DURATION = 0.5
+
 
 # Store tracking information for each detected face
 eye_tracks = {}
@@ -309,10 +293,6 @@ def predict_eye_state(eye_image):
             verbose=0
         )[0][0]
 
-        # MRL model:
-        # < 0.5 = Open
-        # >= 0.5 = Close
-
         if prediction < 0.5:
 
             eye_state = "Open"
@@ -359,7 +339,10 @@ def get_eye_track_id(
 
     with eye_tracks_lock:
 
-        # Remove old face tracks
+        # ----------------------------------------------------
+        # Remove old tracks
+        # ----------------------------------------------------
+
         old_tracks = [
 
             track_id
@@ -380,7 +363,10 @@ def get_eye_track_id(
 
             del eye_tracks[track_id]
 
+        # ----------------------------------------------------
         # Find closest existing face
+        # ----------------------------------------------------
+
         best_track_id = None
 
         best_distance = float("inf")
@@ -414,7 +400,10 @@ def get_eye_track_id(
 
                 best_track_id = track_id
 
-        # New face
+        # ----------------------------------------------------
+        # Create new track
+        # ----------------------------------------------------
+
         if best_track_id is None:
 
             best_track_id = next_track_id
@@ -486,7 +475,6 @@ def update_eye_display_state(
 
         if raw_state == "Close":
 
-            # Eyes have just closed
             if previous_state != "Close":
 
                 track["closed_since"] = (
@@ -509,7 +497,6 @@ def update_eye_display_state(
                 "previous_raw_state"
             ] = "Close"
 
-            # More than 3 seconds
             if (
                 closed_duration
                 >=
@@ -522,7 +509,6 @@ def update_eye_display_state(
 
                 return "Sleeping"
 
-            # 0.8 - 3 seconds
             elif (
                 closed_duration
                 >=
@@ -531,7 +517,6 @@ def update_eye_display_state(
 
                 return "Drowsy"
 
-            # Less than 0.8 seconds
             else:
 
                 return "Close"
@@ -563,8 +548,6 @@ def update_eye_display_state(
                 "closed_since"
             ] = None
 
-            # If person was sleeping,
-            # reopening = Open
             if track["was_sleeping"]:
 
                 track[
@@ -577,7 +560,6 @@ def update_eye_display_state(
 
                 return "Open"
 
-            # Quick close + reopen = Blink
             if (
                 closed_duration > 0
                 and
@@ -596,7 +578,6 @@ def update_eye_display_state(
 
                 return "Blink"
 
-            # Keep Blink visible briefly
             if (
                 current_time
                 <
@@ -621,10 +602,6 @@ def update_eye_display_state(
 # ============================================================
 
 def process_frame(frame):
-
-    global last_person_boxes
-
-    last_person_boxes = []
 
     results = []
 
@@ -673,9 +650,6 @@ def process_frame(frame):
             if person_crop.size == 0:
 
                 continue
-
-            # Remember this person for the student reports
-            last_person_boxes.append((x1, y1, x2, y2))
 
             # =================================================
             # 3. FACE DETECTION
@@ -784,7 +758,7 @@ def process_frame(frame):
                 eye_predictions = []
 
                 # =================================================
-                # FIRST: USE HAAR DETECTED EYES
+                # FIRST: HAAR DETECTED EYES
                 # =================================================
 
                 for (
@@ -818,10 +792,7 @@ def process_frame(frame):
                     )
 
                 # =================================================
-                # FALLBACK:
-                # IF HAAR DOES NOT FIND EYES
-                #
-                # This is important when eyes are closed.
+                # FALLBACK EYE REGIONS
                 # =================================================
 
                 if not eye_predictions:
@@ -830,7 +801,6 @@ def process_frame(frame):
                         face_color.shape[:2]
                     )
 
-                    # Left eye region
                     left_x1 = int(
                         face_w * 0.10
                     )
@@ -847,7 +817,6 @@ def process_frame(frame):
                         face_h * 0.48
                     )
 
-                    # Right eye region
                     right_x1 = int(
                         face_w * 0.52
                     )
@@ -856,13 +825,11 @@ def process_frame(frame):
                         face_w * 0.90
                     )
 
-                    # Left eye crop
                     left_eye = face_color[
                         eye_y1:eye_y2,
                         left_x1:left_x2
                     ]
 
-                    # Right eye crop
                     right_eye = face_color[
                         eye_y1:eye_y2,
                         right_x1:right_x2
@@ -969,7 +936,7 @@ def process_frame(frame):
                     )
 
                     # =================================================
-                    # 10. CONVERT TO DISPLAY STATE
+                    # 10. DISPLAY EYE STATE
                     # =================================================
 
                     eye_state = (
@@ -978,12 +945,39 @@ def process_frame(frame):
                             raw_eye_state
                         )
                     )
+
                     print(
-    f"Track {track_id} | Raw Eye: {raw_eye_state} | "
-    f"Display Eye: {eye_state}"
-)
+                        f"Track {track_id} | "
+                        f"Raw Eye: {raw_eye_state} | "
+                        f"Display Eye: {eye_state}"
+                    )
 
                 else:
+
+                    # We still need a tracking ID.
+                    # Use the face center even when
+                    # the eye detector fails.
+
+                    face_center_x = (
+                        x1
+                        +
+                        fx
+                        +
+                        fw // 2
+                    )
+
+                    face_center_y = (
+                        y1
+                        +
+                        fy
+                        +
+                        fh // 2
+                    )
+
+                    track_id = get_eye_track_id(
+                        face_center_x,
+                        face_center_y
+                    )
 
                     eye_state = "Unknown"
 
@@ -1001,6 +995,14 @@ def process_frame(frame):
                 # =================================================
 
                 result = {
+
+                    # ------------------------------------------------
+                    # STABLE TRACKING ID
+                    # ------------------------------------------------
+
+                    "student_id": int(
+                        track_id + 1
+                    ),
 
                     "emotion": emotion,
 
@@ -1083,10 +1085,11 @@ def process_frame(frame):
                     )
 
                 # =================================================
-                # 15. DISPLAY EMOTION
+                # 15. DISPLAY STUDENT ID + EMOTION
                 # =================================================
 
                 text = (
+                    f"Student {track_id + 1} | "
                     f"{emotion}: "
                     f"{confidence:.1f}%"
                 )
@@ -1229,20 +1232,6 @@ def ai_processing_loop():
 
             latest_results = results
 
-        try:
-
-            update_student_registry(
-                list(last_person_boxes),
-                results
-            )
-
-        except Exception as report_error:
-
-            print(
-                "Student report update error:",
-                report_error
-            )
-
     print(
         "AI processing thread stopped."
     )
@@ -1296,7 +1285,11 @@ def get_camera():
     source = (
         CAMERA_SOURCE
         if CAMERA_SOURCE is not None
-        else (MOBILE_CAMERA_URL if MOBILE_CAMERA_URL else None)
+        else (
+            MOBILE_CAMERA_URL
+            if MOBILE_CAMERA_URL
+            else None
+        )
     )
 
     if source is None or source == "":
@@ -1312,17 +1305,24 @@ def get_camera():
         ):
 
             print(
-                f"Connecting to camera ({CAMERA_TYPE}): {source}"
+                f"Connecting to camera "
+                f"({CAMERA_TYPE}): {source}"
             )
 
             try:
 
-                # If source is an integer index (webcam) or digit string "0", "1"
-                if isinstance(source, int) or (isinstance(source, str) and source.strip().isdigit()):
+                if (
+                    isinstance(source, int)
+                    or
+                    (
+                        isinstance(source, str)
+                        and
+                        source.strip().isdigit()
+                    )
+                ):
 
                     cam_idx = int(source)
 
-                    # On Windows, cv2.CAP_DSHOW initializes webcams much faster than MSMF
                     if os.name == "nt":
 
                         camera = cv2.VideoCapture(
@@ -1345,7 +1345,8 @@ def get_camera():
             except Exception as e:
 
                 print(
-                    f"Exception creating VideoCapture: {e}"
+                    f"Exception creating "
+                    f"VideoCapture: {e}"
                 )
 
                 camera = None
@@ -1363,16 +1364,22 @@ def get_camera():
 
                 pass
 
-            if camera is not None and camera.isOpened():
+            if (
+                camera is not None
+                and
+                camera.isOpened()
+            ):
 
                 print(
-                    f"{CAMERA_TYPE.capitalize()} camera connected successfully!"
+                    f"{CAMERA_TYPE.capitalize()} "
+                    f"camera connected successfully!"
                 )
 
             else:
 
                 print(
-                    f"ERROR: Could not connect to {CAMERA_TYPE} camera."
+                    f"ERROR: Could not connect "
+                    f"to {CAMERA_TYPE} camera."
                 )
 
         return camera
@@ -1395,39 +1402,64 @@ def connect_camera():
     global latest_frame
     global eye_tracks
     global latest_results
+    global next_track_id
 
     data = request.get_json() or {}
-    cam_type = data.get("type", "phone").lower()
+
+    cam_type = data.get(
+        "type",
+        "phone"
+    ).lower()
 
     if cam_type == "webcam":
 
-        cam_index = data.get("index", 0)
+        cam_index = data.get(
+            "index",
+            0
+        )
 
         try:
 
-            cam_index = int(cam_index)
+            cam_index = int(
+                cam_index
+            )
 
-        except (ValueError, TypeError):
+        except (
+            ValueError,
+            TypeError
+        ):
 
             cam_index = 0
 
         new_source = cam_index
-        display_name = f"Webcam (Device {cam_index})"
+
+        display_name = (
+            f"Webcam (Device {cam_index})"
+        )
 
     else:
 
         cam_type = "phone"
-        new_url = data.get("url", "").strip()
+
+        new_url = data.get(
+            "url",
+            ""
+        ).strip()
 
         if not new_url:
 
             return jsonify({
                 "success": False,
-                "message": "Camera URL cannot be empty for phone mode"
+                "message":
+                    "Camera URL cannot be empty "
+                    "for phone mode"
             }), 400
 
         new_source = new_url
-        display_name = f"Phone Camera ({new_url})"
+
+        display_name = (
+            f"Phone Camera ({new_url})"
+        )
 
     with camera_lock:
 
@@ -1444,8 +1476,12 @@ def connect_camera():
             camera = None
 
         CAMERA_SOURCE = new_source
+
         CAMERA_TYPE = cam_type
-        MOBILE_CAMERA_URL = str(new_source)
+
+        MOBILE_CAMERA_URL = str(
+            new_source
+        )
 
     with frame_lock:
 
@@ -1455,18 +1491,22 @@ def connect_camera():
 
         latest_results.clear()
 
+    # --------------------------------------------------------
     # Reset eye tracking
+    # --------------------------------------------------------
+
     with eye_tracks_lock:
 
         eye_tracks.clear()
 
-    # Start a fresh student-report session
-    reset_student_registry()
+        # Restart Student IDs from 1
+        next_track_id = 0
 
     print("--------------------------------")
 
     print(
-        f"Camera source updated: [{CAMERA_TYPE}] {new_source}"
+        f"Camera source updated: "
+        f"[{CAMERA_TYPE}] {new_source}"
     )
 
     print("--------------------------------")
@@ -1474,11 +1514,20 @@ def connect_camera():
     start_ai_thread()
 
     return jsonify({
+
         "success": True,
-        "message": f"{display_name} connected successfully",
-        "type": CAMERA_TYPE,
-        "source": str(CAMERA_SOURCE),
-        "url": MOBILE_CAMERA_URL
+
+        "message":
+            f"{display_name} connected successfully",
+
+        "type":
+            CAMERA_TYPE,
+
+        "source":
+            str(CAMERA_SOURCE),
+
+        "url":
+            MOBILE_CAMERA_URL
     })
 
 
@@ -1497,15 +1546,39 @@ def camera_status():
     global MOBILE_CAMERA_URL
     global camera
 
-    has_source = (CAMERA_SOURCE is not None) or (MOBILE_CAMERA_URL != "")
-    is_open = camera is not None and camera.isOpened()
-    connected = has_source and is_open
+    has_source = (
+        CAMERA_SOURCE is not None
+    ) or (
+        MOBILE_CAMERA_URL != ""
+    )
+
+    is_open = (
+        camera is not None
+        and
+        camera.isOpened()
+    )
+
+    connected = (
+        has_source
+        and
+        is_open
+    )
 
     return jsonify({
-        "connected": connected,
-        "type": CAMERA_TYPE,
-        "source": str(CAMERA_SOURCE) if CAMERA_SOURCE is not None else "",
-        "url": MOBILE_CAMERA_URL
+
+        "connected":
+            connected,
+
+        "type":
+            CAMERA_TYPE,
+
+        "source":
+            str(CAMERA_SOURCE)
+            if CAMERA_SOURCE is not None
+            else "",
+
+        "url":
+            MOBILE_CAMERA_URL
     })
 
 
@@ -1526,6 +1599,7 @@ def disconnect_camera():
     global latest_frame
     global latest_results
     global eye_tracks
+    global next_track_id
 
     stop_ai_thread()
 
@@ -1544,7 +1618,9 @@ def disconnect_camera():
             camera = None
 
         CAMERA_SOURCE = None
+
         CAMERA_TYPE = "none"
+
         MOBILE_CAMERA_URL = ""
 
     with frame_lock:
@@ -1555,21 +1631,26 @@ def disconnect_camera():
 
         latest_results.clear()
 
-    # Reset eye tracking
+    # --------------------------------------------------------
+    # Reset eye tracking and Student IDs
+    # --------------------------------------------------------
+
     with eye_tracks_lock:
 
         eye_tracks.clear()
 
-    # Start a fresh student-report session
-    reset_student_registry()
+        next_track_id = 0
 
     print(
         "Camera disconnected"
     )
 
     return jsonify({
+
         "success": True,
-        "message": "Camera disconnected"
+
+        "message":
+            "Camera disconnected"
     })
 
 
@@ -1601,7 +1682,9 @@ def generate_frames():
         if not success:
 
             print(
-                f"Could not read frame from camera ({CAMERA_TYPE})."
+                f"Could not read frame "
+                f"from camera "
+                f"({CAMERA_TYPE})."
             )
 
             with camera_lock:
@@ -1622,31 +1705,53 @@ def generate_frames():
 
             continue
 
-        # Mirror frame horizontally for laptop/PC webcam for natural user experience
+        # ----------------------------------------------------
+        # Mirror webcam
+        # ----------------------------------------------------
+
         if CAMERA_TYPE == "webcam":
 
-            frame = cv2.flip(frame, 1)
+            frame = cv2.flip(
+                frame,
+                1
+            )
 
+        # ----------------------------------------------------
         # Save latest frame
+        # ----------------------------------------------------
+
         with frame_lock:
 
             latest_frame = frame.copy()
 
+        # ----------------------------------------------------
         # Get latest AI results
+        # ----------------------------------------------------
+
         with results_lock:
 
             results_copy = list(
                 latest_results
             )
 
+        # ----------------------------------------------------
         # Draw AI results
+        # ----------------------------------------------------
+
         for result in results_copy:
 
             face_x = result["x"]
+
             face_y = result["y"]
 
             fw = result["width"]
+
             fh = result["height"]
+
+            student_id = result.get(
+                "student_id",
+                0
+            )
 
             cv2.rectangle(
                 frame,
@@ -1663,6 +1768,7 @@ def generate_frames():
             )
 
             emotion_text = (
+                f'Student {student_id} | '
                 f'{result["emotion"]}: '
                 f'{result["confidence"]:.1f}%'
             )
@@ -1704,7 +1810,10 @@ def generate_frames():
                 2
             )
 
+        # ----------------------------------------------------
         # Encode JPEG
+        # ----------------------------------------------------
+
         success, buffer = cv2.imencode(
             ".jpg",
             frame
@@ -1756,11 +1865,14 @@ def emotion_results():
         )
 
     return jsonify({
+
         "success": True,
-        "faces_detected": len(
+
+        "faces_detected":
+            len(results_copy),
+
+        "faces":
             results_copy
-        ),
-        "faces": results_copy
     })
 
 
@@ -1772,35 +1884,82 @@ def recorded_iou(box_a, box_b):
     """IoU for (x, y, w, h) boxes."""
 
     ax, ay, aw, ah = box_a
+
     bx, by, bw, bh = box_b
 
     ax2 = ax + aw
     ay2 = ay + ah
+
     bx2 = bx + bw
     by2 = by + bh
 
-    inter_x1 = max(ax, bx)
-    inter_y1 = max(ay, by)
-    inter_x2 = min(ax2, bx2)
-    inter_y2 = min(ay2, by2)
+    inter_x1 = max(
+        ax,
+        bx
+    )
 
-    inter_w = max(0, inter_x2 - inter_x1)
-    inter_h = max(0, inter_y2 - inter_y1)
+    inter_y1 = max(
+        ay,
+        by
+    )
 
-    intersection = inter_w * inter_h
+    inter_x2 = min(
+        ax2,
+        bx2
+    )
 
-    area_a = max(0, aw) * max(0, ah)
-    area_b = max(0, bw) * max(0, bh)
+    inter_y2 = min(
+        ay2,
+        by2
+    )
 
-    union = area_a + area_b - intersection
+    inter_w = max(
+        0,
+        inter_x2 - inter_x1
+    )
+
+    inter_h = max(
+        0,
+        inter_y2 - inter_y1
+    )
+
+    intersection = (
+        inter_w * inter_h
+    )
+
+    area_a = (
+        max(0, aw)
+        *
+        max(0, ah)
+    )
+
+    area_b = (
+        max(0, bw)
+        *
+        max(0, bh)
+    )
+
+    union = (
+        area_a
+        +
+        area_b
+        -
+        intersection
+    )
 
     if union <= 0:
+
         return 0.0
 
-    return intersection / union
+    return (
+        intersection
+        /
+        union
+    )
 
 
 def recorded_center(box):
+
     x, y, w, h = box
 
     return (
@@ -1809,24 +1968,48 @@ def recorded_center(box):
     )
 
 
-def recorded_center_distance(box_a, box_b):
+def recorded_center_distance(
+    box_a,
+    box_b
+):
 
-    ax, ay = recorded_center(box_a)
-    bx, by = recorded_center(box_b)
+    ax, ay = recorded_center(
+        box_a
+    )
+
+    bx, by = recorded_center(
+        box_b
+    )
 
     dx = ax - bx
+
     dy = ay - by
 
     distance = float(
-        np.sqrt(dx * dx + dy * dy)
+        np.sqrt(
+            dx * dx
+            +
+            dy * dy
+        )
     )
 
     _, _, aw, ah = box_a
+
     _, _, bw, bh = box_b
 
     scale = max(
         1.0,
-        (aw + ah + bw + bh) / 4.0
+        (
+            aw
+            +
+            ah
+            +
+            bw
+            +
+            bh
+        )
+        /
+        4.0
     )
 
     return distance / scale
@@ -1840,7 +2023,7 @@ def recorded_detect_people(frame):
 
     results = yolo_model(
         frame,
-        classes=[0],          # COCO class 0 = person
+        classes=[0],
         conf=0.35,
         verbose=False
     )
@@ -1850,19 +2033,31 @@ def recorded_detect_people(frame):
     for result in results:
 
         if result.boxes is None:
+
             continue
 
         for box in result.boxes:
 
-            xyxy = box.xyxy[0].cpu().numpy()
+            xyxy = (
+                box.xyxy[0]
+                .cpu()
+                .numpy()
+            )
 
             x1, y1, x2, y2 = map(
                 int,
                 xyxy
             )
 
-            x1 = max(0, x1)
-            y1 = max(0, y1)
+            x1 = max(
+                0,
+                x1
+            )
+
+            y1 = max(
+                0,
+                y1
+            )
 
             x2 = min(
                 frame.shape[1],
@@ -1875,13 +2070,24 @@ def recorded_detect_people(frame):
             )
 
             w = x2 - x1
+
             h = y2 - y1
 
-            if w <= 0 or h <= 0:
+            if (
+                w <= 0
+                or
+                h <= 0
+            ):
+
                 continue
 
             person_boxes.append(
-                (x1, y1, w, h)
+                (
+                    x1,
+                    y1,
+                    w,
+                    h
+                )
             )
 
     return person_boxes
@@ -1904,6 +2110,7 @@ def recorded_detect_face_inside_person(
     ]
 
     if person_crop.size == 0:
+
         return None
 
     gray = cv2.cvtColor(
@@ -1919,9 +2126,9 @@ def recorded_detect_face_inside_person(
     )
 
     if len(faces) == 0:
+
         return None
 
-    # Choose the largest face.
     face = max(
         faces,
         key=lambda b: b[2] * b[3]
@@ -1948,12 +2155,29 @@ def recorded_predict_emotion(
 
     x, y, w, h = face_box
 
-    frame_h, frame_w = frame.shape[:2]
+    frame_h, frame_w = (
+        frame.shape[:2]
+    )
 
-    x = max(0, int(x))
-    y = max(0, int(y))
-    w = max(1, int(w))
-    h = max(1, int(h))
+    x = max(
+        0,
+        int(x)
+    )
+
+    y = max(
+        0,
+        int(y)
+    )
+
+    w = max(
+        1,
+        int(w)
+    )
+
+    h = max(
+        1,
+        int(h)
+    )
 
     x2 = min(
         frame_w,
@@ -1971,6 +2195,7 @@ def recorded_predict_emotion(
     ]
 
     if face.size == 0:
+
         return "Unknown", 0.0
 
     gray_face = cv2.cvtColor(
@@ -1985,7 +2210,11 @@ def recorded_predict_emotion(
     )
 
     model_input = (
-        gray_face.astype("float32") / 255.0
+        gray_face.astype(
+            "float32"
+        )
+        /
+        255.0
     )
 
     model_input = np.expand_dims(
@@ -2009,12 +2238,17 @@ def recorded_predict_emotion(
     )
 
     emotion_index = int(
-        np.argmax(probabilities)
+        np.argmax(
+            probabilities
+        )
     )
 
-    if emotion_index >= len(
-        emotion_labels
+    if (
+        emotion_index
+        >=
+        len(emotion_labels)
     ):
+
         return "Unknown", 0.0
 
     emotion = emotion_labels[
@@ -2024,10 +2258,15 @@ def recorded_predict_emotion(
     confidence = float(
         probabilities[
             emotion_index
-        ] * 100.0
+        ]
+        *
+        100.0
     )
 
-    return emotion, confidence
+    return (
+        emotion,
+        confidence
+    )
 
 
 # ============================================================
@@ -2041,12 +2280,29 @@ def recorded_predict_eye_state(
 
     x, y, w, h = face_box
 
-    frame_h, frame_w = frame.shape[:2]
+    frame_h, frame_w = (
+        frame.shape[:2]
+    )
 
-    x = max(0, int(x))
-    y = max(0, int(y))
-    w = max(1, int(w))
-    h = max(1, int(h))
+    x = max(
+        0,
+        int(x)
+    )
+
+    y = max(
+        0,
+        int(y)
+    )
+
+    w = max(
+        1,
+        int(w)
+    )
+
+    h = max(
+        1,
+        int(h)
+    )
 
     x2 = min(
         frame_w,
@@ -2064,11 +2320,18 @@ def recorded_predict_eye_state(
     ]
 
     if face.size == 0:
+
         return "Unknown", 0.0
 
-    # Eyes are normally located in upper half of face.
     upper_face = face[
-        0:max(1, int(face.shape[0] * 0.60)),
+        0:max(
+            1,
+            int(
+                face.shape[0]
+                *
+                0.60
+            )
+        ),
         :
     ]
 
@@ -2085,9 +2348,9 @@ def recorded_predict_eye_state(
     )
 
     if len(eyes) == 0:
+
         return "Unknown", 0.0
 
-    # Select largest detected eye region.
     eye_box = max(
         eyes,
         key=lambda b: b[2] * b[3]
@@ -2101,9 +2364,9 @@ def recorded_predict_eye_state(
     ]
 
     if eye_crop.size == 0:
+
         return "Unknown", 0.0
 
-    # Reuse the existing MRL prediction function.
     return predict_eye_state(
         eye_crop
     )
@@ -2120,19 +2383,25 @@ def recorded_match_person(
 ):
 
     best_track_id = None
+
     best_score = -1.0
 
     current_area = max(
         1,
-        person_box[2] * person_box[3]
+        person_box[2]
+        *
+        person_box[3]
     )
 
     for track_id, track in tracks.items():
 
         if track_id in used_track_ids:
+
             continue
 
-        previous_box = track["box"]
+        previous_box = track[
+            "box"
+        ]
 
         iou = recorded_iou(
             person_box,
@@ -2146,7 +2415,9 @@ def recorded_match_person(
 
         previous_area = max(
             1,
-            previous_box[2] * previous_box[3]
+            previous_box[2]
+            *
+            previous_box[3]
         )
 
         area_ratio = (
@@ -2168,32 +2439,49 @@ def recorded_match_person(
                 +
                 0.20 * max(
                     0.0,
-                    1.0 - distance / 2.5
+                    1.0
+                    -
+                    distance
+                    /
+                    2.5
                 )
                 +
-                0.10 * area_ratio
+                0.10
+                *
+                area_ratio
             )
 
         elif (
             distance <= 1.80
-            and area_ratio >= 0.45
+            and
+            area_ratio >= 0.45
         ):
 
             score = (
-                0.70 * max(
+                0.70
+                *
+                max(
                     0.0,
-                    1.0 - distance / 1.80
+                    1.0
+                    -
+                    distance
+                    /
+                    1.80
                 )
                 +
-                0.30 * area_ratio
+                0.30
+                *
+                area_ratio
             )
 
         else:
+
             continue
 
         if score > best_score:
 
             best_score = score
+
             best_track_id = track_id
 
     return best_track_id
@@ -2213,7 +2501,9 @@ def recorded_build_person_summary(
         tracks.keys()
     ):
 
-        track = tracks[track_id]
+        track = tracks[
+            track_id
+        ]
 
         emotion_counts = track[
             "emotion_counts"
@@ -2223,9 +2513,9 @@ def recorded_build_person_summary(
             "eye_counts"
         ]
 
-        # -------------------------
+        # ----------------------------------------------------
         # Emotion
-        # -------------------------
+        # ----------------------------------------------------
 
         if emotion_counts:
 
@@ -2246,9 +2536,9 @@ def recorded_build_person_summary(
 
             dominant_emotion = "Unknown"
 
-        # -------------------------
+        # ----------------------------------------------------
         # Eyes
-        # -------------------------
+        # ----------------------------------------------------
 
         if eye_counts:
 
@@ -2314,6 +2604,7 @@ def recorded_build_person_summary(
 def analyze_video():
 
     video_path = None
+
     cap = None
 
     try:
@@ -2325,17 +2616,27 @@ def analyze_video():
         if "video" not in request.files:
 
             return jsonify({
+
                 "success": False,
-                "message": "No video received"
+
+                "message":
+                    "No video received"
+
             }), 400
 
-        video_file = request.files["video"]
+        video_file = request.files[
+            "video"
+        ]
 
         if video_file.filename == "":
 
             return jsonify({
+
                 "success": False,
-                "message": "No video selected"
+
+                "message":
+                    "No video selected"
+
             }), 400
 
         # ====================================================
@@ -2359,6 +2660,7 @@ def analyze_video():
         )[1].lower()
 
         if not extension:
+
             extension = ".mp4"
 
         filename = (
@@ -2372,7 +2674,9 @@ def analyze_video():
             filename
         )
 
-        video_file.save(video_path)
+        video_file.save(
+            video_path
+        )
 
         # ====================================================
         # 3. OPEN VIDEO
@@ -2385,8 +2689,12 @@ def analyze_video():
         if not cap.isOpened():
 
             return jsonify({
+
                 "success": False,
-                "message": "Could not open video"
+
+                "message":
+                    "Could not open video"
+
             }), 400
 
         total_frames = int(
@@ -2401,7 +2709,11 @@ def analyze_video():
             )
         )
 
-        if not np.isfinite(fps) or fps <= 0:
+        if (
+            not np.isfinite(fps)
+            or
+            fps <= 0
+        ):
 
             fps = 25.0
 
@@ -2422,12 +2734,15 @@ def analyze_video():
             1,
             int(
                 round(
-                    fps / sample_fps
+                    fps
+                    /
+                    sample_fps
                 )
             )
         )
 
         frame_number = 0
+
         sampled_frames = 0
 
         max_missed_frames = 4
@@ -2441,15 +2756,18 @@ def analyze_video():
             success, frame = cap.read()
 
             if not success:
+
                 break
 
             frame_number += 1
 
             if (
                 (frame_number - 1)
-                % frame_step
+                %
+                frame_step
                 != 0
             ):
+
                 continue
 
             sampled_frames += 1
@@ -2458,11 +2776,14 @@ def analyze_video():
             # YOLO PERSON DETECTION
             # =================================================
 
-            person_boxes = recorded_detect_people(
-                frame
+            person_boxes = (
+                recorded_detect_people(
+                    frame
+                )
             )
 
             used_track_ids = set()
+
             matched_track_ids = set()
 
             # =================================================
@@ -2471,10 +2792,12 @@ def analyze_video():
 
             for person_box in person_boxes:
 
-                track_id = recorded_match_person(
-                    person_box,
-                    tracks,
-                    used_track_ids
+                track_id = (
+                    recorded_match_person(
+                        person_box,
+                        tracks,
+                        used_track_ids
+                    )
                 )
 
                 if track_id is None:
@@ -2483,21 +2806,30 @@ def analyze_video():
 
                     next_person_id += 1
 
-                    tracks[track_id] = {
+                    tracks[
+                        track_id
+                    ] = {
 
-                        "box": person_box,
+                        "box":
+                            person_box,
 
-                        "samples_analyzed": 0,
+                        "samples_analyzed":
+                            0,
 
-                        "missed_frames": 0,
+                        "missed_frames":
+                            0,
 
-                        "emotion_counts": {},
+                        "emotion_counts":
+                            {},
 
-                        "emotion_confidence_sum": {},
+                        "emotion_confidence_sum":
+                            {},
 
-                        "eye_counts": {},
+                        "eye_counts":
+                            {},
 
-                        "eye_confidence_sum": {}
+                        "eye_confidence_sum":
+                            {}
                     }
 
                 track = tracks[
@@ -2516,15 +2848,19 @@ def analyze_video():
                     person_box
                 )
 
-                track["missed_frames"] = 0
+                track[
+                    "missed_frames"
+                ] = 0
 
                 # =================================================
-                # FACE DETECTION INSIDE PERSON
+                # FACE DETECTION
                 # =================================================
 
-                face_box = recorded_detect_face_inside_person(
-                    frame,
-                    person_box
+                face_box = (
+                    recorded_detect_face_inside_person(
+                        frame,
+                        person_box
+                    )
                 )
 
                 if face_box is None:
@@ -2532,10 +2868,13 @@ def analyze_video():
                     continue
 
                 # =================================================
-                # FER2013 EMOTION
+                # EMOTION
                 # =================================================
 
-                emotion, emotion_confidence = (
+                (
+                    emotion,
+                    emotion_confidence
+                ) = (
                     recorded_predict_emotion(
                         frame,
                         face_box
@@ -2543,10 +2882,13 @@ def analyze_video():
                 )
 
                 # =================================================
-                # MRL EYE STATE
+                # EYE STATE
                 # =================================================
 
-                eye_state, eye_confidence = (
+                (
+                    eye_state,
+                    eye_confidence
+                ) = (
                     recorded_predict_eye_state(
                         frame,
                         face_box
@@ -2567,7 +2909,9 @@ def analyze_video():
                         ].get(
                             emotion,
                             0
-                        ) + 1
+                        )
+                        +
+                        1
                     )
 
                     track[
@@ -2597,7 +2941,9 @@ def analyze_video():
                         ].get(
                             eye_state,
                             0
-                        ) + 1
+                        )
+                        +
+                        1
                     )
 
                     track[
@@ -2655,15 +3001,16 @@ def analyze_video():
             )
         )
 
-        total_faces_detected = len(
-            [
-                track
-                for track in tracks.values()
-                if track[
-                    "samples_analyzed"
-                ] > 0
-            ]
-        )
+        total_faces_detected = len([
+
+            track
+
+            for track in tracks.values()
+
+            if track[
+                "samples_analyzed"
+            ] > 0
+        ])
 
         return jsonify({
 
@@ -2704,6 +3051,7 @@ def analyze_video():
 
             "error":
                 str(e)
+
         }), 500
 
     finally:
@@ -2715,7 +3063,9 @@ def analyze_video():
         if (
             video_path
             and
-            os.path.exists(video_path)
+            os.path.exists(
+                video_path
+            )
         ):
 
             try:
@@ -2739,7 +3089,11 @@ def analyze_video():
 if __name__ == "__main__":
 
     print("--------------------------------")
-    print("Classroom AI Backend")
+
+    print(
+        "Classroom AI Backend"
+    )
+
     print("--------------------------------")
 
     print(
@@ -2771,4 +3125,3 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000
     )
-
