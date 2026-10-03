@@ -4,10 +4,7 @@ import os
 import cv2
 import time
 
-from eye_tracking import (
-    eye_tracks,
-    eye_tracks_lock
-)
+from eye_tracking import reset_eye_tracks
 
 from ai_processing import (
     process_frame
@@ -168,10 +165,7 @@ def analyze_video():
         # ====================================================
         # RESET EYE TRACKING
         # ====================================================
-
-        with eye_tracks_lock:
-
-            eye_tracks.clear()
+        reset_eye_tracks()
 
         # ====================================================
         # PROCESS VIDEO

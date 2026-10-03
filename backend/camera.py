@@ -5,10 +5,7 @@ import cv2
 import threading
 import time
 
-from eye_tracking import (
-    eye_tracks,
-    eye_tracks_lock
-)
+from eye_tracking import reset_eye_tracks
 
 from ai_processing import (
     start_ai_thread,
@@ -296,10 +293,7 @@ def connect_camera():
     set_latest_frame(None)
 
     clear_latest_results()
-
-    with eye_tracks_lock:
-
-        eye_tracks.clear()
+    reset_eye_tracks()
 
     print("--------------------------------")
 
@@ -469,10 +463,7 @@ def disconnect_camera():
     set_latest_frame(None)
 
     clear_latest_results()
-
-    with eye_tracks_lock:
-
-        eye_tracks.clear()
+    reset_eye_tracks()
 
     print(
         "Camera disconnected"
