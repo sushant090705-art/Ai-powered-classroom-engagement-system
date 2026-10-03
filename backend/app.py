@@ -10,6 +10,12 @@ import threading
 import time
 from ultralytics import YOLO
 
+from student_reports import (
+    students_bp,
+    update_student_registry,
+    reset_student_registry
+)
+
 
 # ============================================================
 # FLASK APP
@@ -17,6 +23,9 @@ from ultralytics import YOLO
 
 app = Flask(__name__)
 CORS(app)
+
+# Per-student report endpoints (/students/report, ...)
+app.register_blueprint(students_bp)
 
 
 # ============================================================
@@ -53,6 +62,10 @@ frame_lock = threading.Lock()
 
 latest_results = []
 results_lock = threading.Lock()
+
+# YOLO person boxes (x1, y1, x2, y2) of the last processed frame.
+# Written and read only by the AI thread; used for student reports.
+last_person_boxes = []
 
 ai_thread = None
 ai_running = False
@@ -609,6 +622,10 @@ def update_eye_display_state(
 
 def process_frame(frame):
 
+    global last_person_boxes
+
+    last_person_boxes = []
+
     results = []
 
     try:
@@ -656,6 +673,9 @@ def process_frame(frame):
             if person_crop.size == 0:
 
                 continue
+
+            # Remember this person for the student reports
+            last_person_boxes.append((x1, y1, x2, y2))
 
             # =================================================
             # 3. FACE DETECTION
@@ -1209,6 +1229,20 @@ def ai_processing_loop():
 
             latest_results = results
 
+        try:
+
+            update_student_registry(
+                list(last_person_boxes),
+                results
+            )
+
+        except Exception as report_error:
+
+            print(
+                "Student report update error:",
+                report_error
+            )
+
     print(
         "AI processing thread stopped."
     )
@@ -1426,6 +1460,9 @@ def connect_camera():
 
         eye_tracks.clear()
 
+    # Start a fresh student-report session
+    reset_student_registry()
+
     print("--------------------------------")
 
     print(
@@ -1522,6 +1559,9 @@ def disconnect_camera():
     with eye_tracks_lock:
 
         eye_tracks.clear()
+
+    # Start a fresh student-report session
+    reset_student_registry()
 
     print(
         "Camera disconnected"

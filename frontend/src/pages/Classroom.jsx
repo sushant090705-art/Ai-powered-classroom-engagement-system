@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import ThemeToggle from "../components/ThemeToggle";
+import StudentReports from "../components/StudentReports";
 import "./Classroom.css";
 
 function Classroom() {
@@ -1071,6 +1072,15 @@ function Classroom() {
           )}
 
         </section>
+
+        {/* =========================
+            INDIVIDUAL STUDENT REPORTS
+        ========================= */}
+
+        <StudentReports
+          backendUrl={BACKEND_URL}
+          active={cameraOn}
+        />
 
         {/* =========================
             CLASSROOM EMOTIONS
