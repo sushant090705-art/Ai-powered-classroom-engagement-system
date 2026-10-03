@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 from pymongo import MongoClient
-
+from student_reports import students_bp
+from student_reports import students_bp, update_student_registry
 import os
 import cv2
 import numpy as np
@@ -18,6 +19,7 @@ from ultralytics import YOLO
 app = Flask(__name__)
 CORS(app)
 
+app.register_blueprint(students_bp)
 
 # ============================================================
 # MONGODB ATLAS
@@ -1228,6 +1230,21 @@ def ai_processing_loop():
             frame_copy
         )
 
+        person_boxes = [
+            (
+                r["person_x"],
+                r["person_y"],
+                r["person_x"] + r["person_width"],
+                r["person_y"] + r["person_height"]
+            )
+            for r in results
+        ]
+
+        update_student_registry(
+            person_boxes,
+            results
+        )
+
         with results_lock:
 
             latest_results = results
@@ -1235,7 +1252,6 @@ def ai_processing_loop():
     print(
         "AI processing thread stopped."
     )
-
 
 # ============================================================
 # START AI THREAD
