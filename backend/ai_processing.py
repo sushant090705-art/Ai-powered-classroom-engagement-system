@@ -1,3 +1,9 @@
+"""Live AI frame processing and background processing loop.
+
+The Flask routes live in camera.py. This module contains only the AI/state
+logic used by those routes.
+"""
+
 import cv2
 import numpy as np
 import threading
@@ -8,80 +14,56 @@ from model_loader import (
     emotion_model,
     emotion_labels,
     face_detector,
-    eye_detector
+    eye_detector,
 )
 
 from eye_tracking import (
+    get_eye_track_id,
     predict_eye_state,
-    update_eye_display_state
+    update_eye_display_state,
 )
 
+from student_reports import update_student_registry
 
-# ============================================================
-# AI PROCESSING VARIABLES
-# ============================================================
-
-ai_thread = None
-ai_running = False
 
 AI_INTERVAL = 0.5
 
 latest_frame = None
-frame_lock = threading.Lock()
-
 latest_results = []
+frame_lock = threading.Lock()
 results_lock = threading.Lock()
 
+# Person boxes from the latest processed frame, consumed by student reports.
+last_person_boxes = []
 
-# ============================================================
-# LATEST FRAME
-# ============================================================
+ai_thread = None
+ai_running = False
+
 
 def set_latest_frame(frame):
-
     global latest_frame
 
     with frame_lock:
+        latest_frame = None if frame is None else frame.copy()
 
-        if frame is None:
-            latest_frame = None
-
-        else:
-            latest_frame = frame.copy()
-
-
-# ============================================================
-# GET LATEST RESULTS
-# ============================================================
 
 def get_latest_results():
-
     with results_lock:
-
-        if latest_results is None:
-            return []
-
         return list(latest_results)
 
 
-# ============================================================
-# CLEAR LATEST RESULTS
-# ============================================================
-
 def clear_latest_results():
-
     global latest_results
 
     with results_lock:
-
         latest_results = []
 
 
-# ============================================================
-# PROCESS FRAME
-# ============================================================
-
 def process_frame(frame):
+
+    global last_person_boxes
+
+    last_person_boxes = []
 
     results = []
 
@@ -91,29 +73,15 @@ def process_frame(frame):
         # 1. YOLO PERSON DETECTION
         # ====================================================
 
-        yolo_results = yolo_model.track(
+        yolo_results = yolo_model(
             frame,
-            persist=True,
-            tracker="bytetrack.yaml",
             classes=[0],
             conf=0.40,
             verbose=False
         )
 
         # ====================================================
-        # 2. CHECK YOLO RESULT
-        # ====================================================
-
-        if (
-            not yolo_results
-            or
-            yolo_results[0].boxes is None
-        ):
-
-            return results
-
-        # ====================================================
-        # 3. PROCESS EACH PERSON
+        # 2. PROCESS EACH PERSON
         # ====================================================
 
         for box in yolo_results[0].boxes:
@@ -123,33 +91,8 @@ def process_frame(frame):
                 box.xyxy[0].tolist()
             )
 
-            # ------------------------------------------------
-            # YOLO TRACKING ID
-            # ------------------------------------------------
-
-            if box.id is not None:
-
-                person_track_id = int(
-                    box.id[0]
-                )
-
-            else:
-
-                person_track_id = None
-
-            # ------------------------------------------------
-            # KEEP COORDINATES INSIDE FRAME
-            # ------------------------------------------------
-
-            x1 = max(
-                0,
-                x1
-            )
-
-            y1 = max(
-                0,
-                y1
-            )
+            x1 = max(0, x1)
+            y1 = max(0, y1)
 
             x2 = min(
                 frame.shape[1],
@@ -170,8 +113,11 @@ def process_frame(frame):
 
                 continue
 
+            # Remember this person for the student reports
+            last_person_boxes.append((x1, y1, x2, y2))
+
             # =================================================
-            # 4. FACE DETECTION
+            # 3. FACE DETECTION
             # =================================================
 
             gray_person = cv2.cvtColor(
@@ -187,20 +133,7 @@ def process_frame(frame):
             )
 
             # =================================================
-            # 5. KEEP ONLY LARGEST FACE
-            # =================================================
-
-            if len(faces) > 0:
-
-                largest_face = max(
-                    faces,
-                    key=lambda face: face[2] * face[3]
-                )
-
-                faces = [largest_face]
-
-            # =================================================
-            # 6. PROCESS FACE
+            # 4. PROCESS EACH FACE
             # =================================================
 
             for (
@@ -229,7 +162,7 @@ def process_frame(frame):
                     continue
 
                 # =================================================
-                # 7. EMOTION MODEL
+                # 5. EMOTION MODEL
                 # =================================================
 
                 emotion_input = cv2.resize(
@@ -239,7 +172,7 @@ def process_frame(frame):
 
                 emotion_input = (
                     emotion_input.astype(
-                        np.float32
+                        "float32"
                     ) / 255.0
                 )
 
@@ -253,16 +186,13 @@ def process_frame(frame):
                     axis=-1
                 )
 
-                # Direct model call instead of predict()
-                predictions = emotion_model(
+                predictions = emotion_model.predict(
                     emotion_input,
-                    training=False
-                ).numpy()
+                    verbose=0
+                )
 
-                emotion_index = int(
-                    np.argmax(
-                        predictions[0]
-                    )
+                emotion_index = np.argmax(
+                    predictions[0]
                 )
 
                 emotion = emotion_labels[
@@ -275,11 +205,12 @@ def process_frame(frame):
                             emotion_index
                         ]
                     )
-                    * 100
+                    *
+                    100
                 )
 
                 # =================================================
-                # 8. EYE DETECTION
+                # 6. EYE DETECTION
                 # =================================================
 
                 eyes = eye_detector.detectMultiScale(
@@ -292,7 +223,7 @@ def process_frame(frame):
                 eye_predictions = []
 
                 # =================================================
-                # 9. USE HAAR DETECTED EYES
+                # FIRST: USE HAAR DETECTED EYES
                 # =================================================
 
                 for (
@@ -326,7 +257,10 @@ def process_frame(frame):
                     )
 
                 # =================================================
-                # 10. FALLBACK EYE DETECTION
+                # FALLBACK:
+                # IF HAAR DOES NOT FIND EYES
+                #
+                # This is important when eyes are closed.
                 # =================================================
 
                 if not eye_predictions:
@@ -361,11 +295,13 @@ def process_frame(frame):
                         face_w * 0.90
                     )
 
+                    # Left eye crop
                     left_eye = face_color[
                         eye_y1:eye_y2,
                         left_x1:left_x2
                     ]
 
+                    # Right eye crop
                     right_eye = face_color[
                         eye_y1:eye_y2,
                         right_x1:right_x2
@@ -380,10 +316,7 @@ def process_frame(frame):
                         )
 
                         eye_predictions.append(
-                            (
-                                state,
-                                conf
-                            )
+                            (state, conf)
                         )
 
                     if right_eye.size != 0:
@@ -395,14 +328,11 @@ def process_frame(frame):
                         )
 
                         eye_predictions.append(
-                            (
-                                state,
-                                conf
-                            )
+                            (state, conf)
                         )
 
                 # =================================================
-                # 11. COMBINE EYE PREDICTIONS
+                # 7. COMBINE EYE PREDICTIONS
                 # =================================================
 
                 if eye_predictions:
@@ -423,9 +353,7 @@ def process_frame(frame):
                     if (
                         close_count
                         >
-                        len(
-                            eye_predictions
-                        ) / 2
+                        len(eye_predictions) / 2
                     ):
 
                         raw_eye_state = "Close"
@@ -451,13 +379,36 @@ def process_frame(frame):
                     )
 
                     # =================================================
-                    # 12. USE YOLO PERSON ID
+                    # 8. FACE CENTER
                     # =================================================
 
-                    track_id = person_track_id
+                    face_center_x = (
+                        x1
+                        +
+                        fx
+                        +
+                        fw // 2
+                    )
+
+                    face_center_y = (
+                        y1
+                        +
+                        fy
+                        +
+                        fh // 2
+                    )
 
                     # =================================================
-                    # 13. UPDATE EYE DISPLAY STATE
+                    # 9. TRACK THIS FACE
+                    # =================================================
+
+                    track_id = get_eye_track_id(
+                        face_center_x,
+                        face_center_y
+                    )
+
+                    # =================================================
+                    # 10. CONVERT TO DISPLAY STATE
                     # =================================================
 
                     eye_state = (
@@ -466,12 +417,10 @@ def process_frame(frame):
                             raw_eye_state
                         )
                     )
-
                     print(
-                        f"Track {track_id} | "
-                        f"Raw Eye: {raw_eye_state} | "
-                        f"Display Eye: {eye_state}"
-                    )
+    f"Track {track_id} | Raw Eye: {raw_eye_state} | "
+    f"Display Eye: {eye_state}"
+)
 
                 else:
 
@@ -480,70 +429,57 @@ def process_frame(frame):
                     eye_confidence = 0.0
 
                 # =================================================
-                # 14. ORIGINAL FRAME COORDINATES
+                # 11. ORIGINAL FRAME COORDINATES
                 # =================================================
 
                 face_x = x1 + fx
                 face_y = y1 + fy
 
                 # =================================================
-                # 15. STORE RESULT
+                # 12. STORE RESULT
                 # =================================================
 
                 result = {
 
-                    "person_id":
-                        person_track_id,
+                    "emotion": emotion,
 
-                    "emotion":
-                        emotion,
+                    "confidence": round(
+                        confidence,
+                        2
+                    ),
 
-                    "confidence":
-                        round(
-                            confidence,
-                            2
-                        ),
+                    "eye_state": eye_state,
 
-                    "eye_state":
-                        eye_state,
+                    "eye_confidence": round(
+                        eye_confidence,
+                        2
+                    ),
 
-                    "eye_confidence":
-                        round(
-                            eye_confidence,
-                            2
-                        ),
+                    "x": int(face_x),
 
-                    "x":
-                        int(face_x),
+                    "y": int(face_y),
 
-                    "y":
-                        int(face_y),
+                    "width": int(fw),
 
-                    "width":
-                        int(fw),
+                    "height": int(fh),
 
-                    "height":
-                        int(fh),
+                    "person_x": int(x1),
 
-                    "person_x":
-                        int(x1),
+                    "person_y": int(y1),
 
-                    "person_y":
-                        int(y1),
+                    "person_width": int(
+                        x2 - x1
+                    ),
 
-                    "person_width":
-                        int(x2 - x1),
-
-                    "person_height":
-                        int(y2 - y1)
+                    "person_height": int(
+                        y2 - y1
+                    )
                 }
 
-                results.append(
-                    result
-                )
+                results.append(result)
 
                 # =================================================
-                # 16. DRAW FACE
+                # 13. DRAW FACE
                 # =================================================
 
                 cv2.rectangle(
@@ -561,7 +497,7 @@ def process_frame(frame):
                 )
 
                 # =================================================
-                # 17. DRAW EYES
+                # 14. DRAW DETECTED EYES
                 # =================================================
 
                 for (
@@ -586,24 +522,13 @@ def process_frame(frame):
                     )
 
                 # =================================================
-                # 18. DISPLAY EMOTION
+                # 15. DISPLAY EMOTION
                 # =================================================
 
-                if person_track_id is not None:
-
-                    text = (
-                        f"S{person_track_id} | "
-                        f"{emotion}: "
-                        f"{confidence:.1f}%"
-                    )
-
-                else:
-
-                    text = (
-                        f"Person | "
-                        f"{emotion}: "
-                        f"{confidence:.1f}%"
-                    )
+                text = (
+                    f"{emotion}: "
+                    f"{confidence:.1f}%"
+                )
 
                 eye_text = (
                     f"Eyes: "
@@ -643,7 +568,7 @@ def process_frame(frame):
                 )
 
             # =================================================
-            # 19. DRAW YOLO PERSON BOX
+            # 16. DRAW YOLO PERSON BOX
             # =================================================
 
             cv2.rectangle(
@@ -660,29 +585,21 @@ def process_frame(frame):
                 2
             )
 
-            if person_track_id is not None:
-
-                cv2.putText(
-                    frame,
-                    f"S{person_track_id}",
-                    (
-                        x1,
-                        max(
-                            y1 - 10,
-                            20
-                        )
-                    ),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 0, 0),
-                    2
-                )
-
-        # ====================================================
-        # RETURN RESULTS
-        # ====================================================
-
-        return results
+            cv2.putText(
+                frame,
+                "Person",
+                (
+                    x1,
+                    max(
+                        y1 - 10,
+                        20
+                    )
+                ),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 0, 0),
+                2
+            )
 
     except Exception as e:
 
@@ -691,14 +608,7 @@ def process_frame(frame):
             e
         )
 
-        # VERY IMPORTANT:
-        # Never return None from this function.
-        return results
-
-
-# ============================================================
-# BACKGROUND AI PROCESSING
-# ============================================================
+    return results
 
 def ai_processing_loop():
 
@@ -723,15 +633,9 @@ def ai_processing_loop():
             AI_INTERVAL
         ):
 
-            time.sleep(
-                0.01
-            )
+            time.sleep(0.01)
 
             continue
-
-        # ====================================================
-        # GET LATEST FRAME
-        # ====================================================
 
         with frame_lock:
 
@@ -741,52 +645,41 @@ def ai_processing_loop():
 
             else:
 
-                frame_copy = (
-                    latest_frame.copy()
-                )
+                frame_copy = latest_frame.copy()
 
         if frame_copy is None:
 
-            time.sleep(
-                0.05
-            )
+            time.sleep(0.05)
 
             continue
 
-        last_process_time = (
-            current_time
-        )
-
-        # ====================================================
-        # PROCESS FRAME
-        # ====================================================
+        last_process_time = current_time
 
         results = process_frame(
             frame_copy
         )
 
-        # ====================================================
-        # SAVE RESULTS
-        # ====================================================
-
-        if results is None:
-
-            results = []
-
         with results_lock:
 
-            latest_results = list(
+            latest_results = results
+
+        try:
+
+            update_student_registry(
+                list(last_person_boxes),
                 results
+            )
+
+        except Exception as report_error:
+
+            print(
+                "Student report update error:",
+                report_error
             )
 
     print(
         "AI processing thread stopped."
     )
-
-
-# ============================================================
-# START AI THREAD
-# ============================================================
 
 def start_ai_thread():
 
@@ -805,11 +698,6 @@ def start_ai_thread():
     )
 
     ai_thread.start()
-
-
-# ============================================================
-# STOP AI THREAD
-# ============================================================
 
 def stop_ai_thread():
 
