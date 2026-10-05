@@ -1073,14 +1073,9 @@ function Classroom() {
 
         </section>
 
-        {/* =========================
-            INDIVIDUAL STUDENT REPORTS
-        ========================= */}
+        {/* 
 
-        <StudentReports
-          backendUrl={BACKEND_URL}
-          active={cameraOn}
-        />
+        
 
         {/* =========================
             CLASSROOM EMOTIONS
