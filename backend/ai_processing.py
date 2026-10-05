@@ -23,7 +23,7 @@ from eye_tracking import (
     update_eye_display_state,
 )
 
-from student_reports import update_student_registry
+
 
 
 AI_INTERVAL = 0.5
