@@ -16,11 +16,13 @@ def create_app():
     from auth import auth_bp
     from camera import camera_bp
     from recorded_video import recorded_video_bp
+    from analytics import analytics_bp
    
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(camera_bp)
     app.register_blueprint(recorded_video_bp)
+    app.register_blueprint(analytics_bp)
   
 
     @app.route("/")

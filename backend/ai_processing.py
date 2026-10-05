@@ -22,7 +22,10 @@ from eye_tracking import (
     predict_eye_state,
     update_eye_display_state,
 )
-
+from analytics import (
+    start_analytics_session,
+    record_ai_results
+)
 
 
 
@@ -658,6 +661,7 @@ def ai_processing_loop():
         results = process_frame(
             frame_copy
         )
+        record_ai_results(results)
 
         with results_lock:
 
@@ -687,8 +691,9 @@ def start_ai_thread():
     global ai_running
 
     if ai_running:
-
         return
+
+    start_analytics_session()
 
     ai_running = True
 
