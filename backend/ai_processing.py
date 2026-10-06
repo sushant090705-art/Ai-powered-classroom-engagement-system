@@ -62,7 +62,7 @@ def clear_latest_results():
         latest_results = []
 
 
-def process_frame(frame):
+def process_frame(frame, face_scale_factor=1.3):
 
     global last_person_boxes
 
@@ -130,7 +130,7 @@ def process_frame(frame):
 
             faces = face_detector.detectMultiScale(
                 gray_person,
-                scaleFactor=1.3,
+                scaleFactor=face_scale_factor,
                 minNeighbors=5,
                 minSize=(50, 50)
             )

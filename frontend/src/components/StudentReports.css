@@ -272,3 +272,27 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ---------- light-theme scope ----------
+   Pages with their own always-light styling (the recorded-video page) wrap
+   the reports in .sr-theme-light so the cards stay readable even when the
+   app is switched to dark mode. */
+
+.sr-theme-light {
+  --bg-card: #ffffff;
+  --bg-hover: #f1f5f9;
+  --text-primary: #172033;
+  --text-secondary: #596579;
+  --text-muted: #7b8495;
+  --border-color: #e5eaf2;
+  --border-divider: #edf0f5;
+  --accent-color: #2563eb;
+  --accent-light: #e8f0ff;
+  --shadow-color: rgba(31, 53, 92, 0.12);
+  --progress-track: #e9edf4;
+  --input-bg: #ffffff;
+}
+
+[data-theme="dark"] .sr-theme-light .sr-pill--good { color: #16a34a; }
+[data-theme="dark"] .sr-theme-light .sr-pill--warn { color: #d97706; }
+[data-theme="dark"] .sr-theme-light .sr-pill--bad  { color: #dc2626; }

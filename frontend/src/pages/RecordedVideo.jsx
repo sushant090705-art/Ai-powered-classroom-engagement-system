@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import StudentReportCard from "../components/StudentReportCard";
+import { formatDuration } from "../utils/formatDuration";
 import "./RecordedVideo.css";
 
 function RecordedVideo() {
   const BACKEND_URL = "http://127.0.0.1:5000";
+
+  const navigate = useNavigate();
 
   const [selectedVideo, setSelectedVideo] = useState(null);
   const [videoPreview, setVideoPreview] = useState("");
@@ -10,6 +15,16 @@ function RecordedVideo() {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // progress of the running analysis
+  const [progress, setProgress] = useState(0);
+  const [stage, setStage] = useState("");
+  const [studentsFound, setStudentsFound] = useState(0);
+
+  // names typed by the teacher (video students are not saved on the server)
+  const [names, setNames] = useState({});
+
+  const pollTimer = useRef(null);
 
   // ============================================================
   // CLEAN VIDEO URL
@@ -23,6 +38,15 @@ function RecordedVideo() {
     };
   }, [videoPreview]);
 
+  // stop polling if the page is closed mid-analysis
+  useEffect(() => {
+    return () => {
+      if (pollTimer.current) {
+        clearTimeout(pollTimer.current);
+      }
+    };
+  }, []);
+
   // ============================================================
   // SELECT VIDEO
   // ============================================================
@@ -33,6 +57,7 @@ function RecordedVideo() {
     setError("");
     setSuccessMessage("");
     setAnalysisResult(null);
+    setNames({});
 
     if (!file) {
       return;
@@ -68,6 +93,7 @@ function RecordedVideo() {
     setSelectedVideo(null);
     setVideoPreview("");
     setAnalysisResult(null);
+    setNames({});
     setError("");
     setSuccessMessage("");
 
@@ -78,6 +104,49 @@ function RecordedVideo() {
       input.value = "";
     }
   };
+
+  // ============================================================
+  // WAIT FOR THE BACKEND JOB (shows live progress)
+  // ============================================================
+
+  const waitForJob = (jobId) =>
+    new Promise((resolve, reject) => {
+      const check = async () => {
+        try {
+          const response = await fetch(
+            `${BACKEND_URL}/analyze-video/status/${jobId}`
+          );
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(
+              data.message || "Lost track of the analysis."
+            );
+          }
+
+          setProgress(Number(data.progress) || 0);
+          setStage(data.stage || "");
+          setStudentsFound(Number(data.students_found) || 0);
+
+          if (data.status === "done") {
+            resolve(data.result);
+            return;
+          }
+
+          if (data.status === "error") {
+            reject(new Error(data.error || "Video analysis failed."));
+            return;
+          }
+
+          pollTimer.current = setTimeout(check, 1500);
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      check();
+    });
 
   // ============================================================
   // ANALYZE VIDEO
@@ -93,11 +162,16 @@ function RecordedVideo() {
     setError("");
     setSuccessMessage("");
     setAnalysisResult(null);
+    setNames({});
+    setProgress(0);
+    setStage("Uploading video");
+    setStudentsFound(0);
 
     try {
       const formData = new FormData();
 
       formData.append("video", selectedVideo);
+      formData.append("async", "1");
 
       const response = await fetch(
         `${BACKEND_URL}/analyze-video`,
@@ -115,9 +189,14 @@ function RecordedVideo() {
         );
       }
 
-      console.log("VIDEO ANALYSIS RESULT:", data);
+      // New backend: a job id to follow. Older backend: the result itself.
+      const result = data.job_id
+        ? await waitForJob(data.job_id)
+        : data;
 
-      setAnalysisResult(data);
+      console.log("VIDEO ANALYSIS RESULT:", result);
+
+      setAnalysisResult(result);
 
       setSuccessMessage(
         "Video analyzed successfully!"
@@ -138,36 +217,16 @@ function RecordedVideo() {
   };
 
   // ============================================================
-  // EMOTION EMOJI
+  // RESULT HELPERS
   // ============================================================
 
-  const getEmotionEmoji = (emotion) => {
-    switch (emotion) {
-      case "Happy":
-        return "😊";
+  const students = Array.isArray(analysisResult?.students)
+    ? analysisResult.students
+    : [];
 
-      case "Sad":
-        return "😢";
-
-      case "Angry":
-        return "😠";
-
-      case "Fear":
-        return "😨";
-
-      case "Disgust":
-        return "🤢";
-
-      case "Surprise":
-        return "😮";
-
-      case "Neutral":
-        return "😐";
-
-      default:
-        return "🙂";
-    }
-  };
+  const notes = Array.isArray(analysisResult?.notes)
+    ? analysisResult.notes
+    : [];
 
   // ============================================================
   // RENDER
@@ -184,22 +243,27 @@ function RecordedVideo() {
 
         <div className="recorded-header">
 
-          <div>
+          <button
+            type="button"
+            className="back-button"
+            onClick={() => navigate("/classroom")}
+          >
+            ← Back to Classroom
+          </button>
 
-            <p className="page-label">
-              CLASSROOM AI
-            </p>
+          <p className="page-label">
+            CLASSROOM AI
+          </p>
 
-            <h1>
-              Recorded Video Analysis
-            </h1>
+          <h1>
+            Recorded Video Analysis
+          </h1>
 
-            <p className="page-description">
-              Upload a classroom recording and let AI
-              analyze faces and emotions.
-            </p>
-
-          </div>
+          <p className="page-description">
+            Upload a classroom recording and get an individual report
+            for every student: emotions, attention, eye status and
+            engagement.
+          </p>
 
         </div>
 
@@ -235,8 +299,14 @@ function RecordedVideo() {
             type="file"
             accept="video/*"
             onChange={handleVideoSelect}
+            disabled={analyzing}
             hidden
           />
+
+          <small className="upload-hint">
+            Works best when faces are clearly visible, well lit and not
+            too small.
+          </small>
 
         </div>
 
@@ -327,14 +397,28 @@ function RecordedVideo() {
               AI is analyzing your video...
             </h3>
 
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${Math.round(progress * 100)}%`,
+                }}
+              />
+            </div>
+
             <p>
-              YOLO is detecting people,
-              Haar is detecting faces and
-              FER is analyzing emotions.
+              {stage || "Working"}
+              {progress > 0 &&
+                ` · ${Math.round(progress * 100)}%`}
+              {studentsFound > 0 &&
+                ` · ${studentsFound} student${
+                  studentsFound === 1 ? "" : "s"
+                } found so far`}
             </p>
 
             <span>
-              Please wait. This may take some time.
+              Please keep this page open. Longer videos take a few
+              minutes.
             </span>
 
           </div>
@@ -390,9 +474,7 @@ function RecordedVideo() {
 
         {analysisResult && (
 
-          <div className="result-card">
-
-            {/* RESULT HEADER */}
+          <div className="result-card sr-theme-light">
 
             <div className="result-header">
 
@@ -401,120 +483,99 @@ function RecordedVideo() {
               </p>
 
               <h2>
-                Analysis Result
+                Student Reports
               </h2>
 
             </div>
 
 
-            {/* ================================================== */}
-            {/* TOTAL FACES DETECTED */}
-            {/* ================================================== */}
+            {/* SUMMARY */}
 
-            <div className="result-list">
+            <div className="sr-summary">
 
-              <div className="result-row highlight-row">
-
+              <div>
+                <small>Students detected</small>
                 <strong>
-                  Total Faces Detected:
+                  {Number(analysisResult.total_faces_detected ?? students.length)}
                 </strong>
+              </div>
 
-                <span>
-                  {Number(
-                    analysisResult.total_faces_detected ?? 0
-                  )}
-                </span>
+              <div>
+                <small>Class engagement</small>
+                <strong>
+                  {Number(analysisResult.class_average_engagement ?? 0)}%
+                </strong>
+              </div>
 
+              <div>
+                <small>Video length</small>
+                <strong>
+                  {formatDuration(analysisResult.duration_seconds)}
+                </strong>
+              </div>
+
+              <div>
+                <small>Frames analysed</small>
+                <strong>
+                  {Number(analysisResult.processed_frames ?? 0)}
+                </strong>
               </div>
 
             </div>
 
 
-            {/* ================================================== */}
-            {/* FACE-WISE EMOTION ANALYSIS */}
-            {/* ================================================== */}
+            {/* NOTES */}
 
-            <div className="person-section">
+            {notes.length > 0 && (
 
-              <h3>
-                Face-wise Emotion Analysis
-              </h3>
+              <ul className="result-notes">
 
+                {notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
 
-              {Array.isArray(
-                analysisResult.person_summary
-              ) &&
-              analysisResult.person_summary.length > 0 ? (
+              </ul>
 
-                <div className="person-grid">
-
-                  {analysisResult.person_summary.map(
-                    (person) => (
-
-                      <div
-                        className="person-card"
-                        key={person.person_id}
-                      >
-
-                        {/* FACE NUMBER */}
-
-                        <div className="person-title">
-
-                          <span>
-                            👤
-                          </span>
-
-                          <strong>
-                            Face {person.person_id}
-                          </strong>
-
-                        </div>
+            )}
 
 
-                        {/* EMOTION */}
+            {/* PER-STUDENT REPORTS */}
 
-                        <div className="person-emotion">
+            {students.length > 0 ? (
 
-                          <span>
-                            Overall Emotion
-                          </span>
+              <div className="sr-grid">
 
-                          <strong>
+                {students.map((student) => (
 
-                            {getEmotionEmoji(
-                              person.most_common_emotion
-                            )}
+                  <StudentReportCard
+                    key={student.student_id}
+                    student={{
+                      ...student,
+                      name: names[student.student_id] ?? student.name,
+                    }}
+                    onRename={(name) =>
+                      setNames((previous) => ({
+                        ...previous,
+                        [student.student_id]: name,
+                      }))
+                    }
+                  />
 
-                            {" "}
+                ))}
 
-                            {person.most_common_emotion ||
-                              "Unknown"}
+              </div>
 
-                          </strong>
+            ) : (
 
-                        </div>
+              <div className="no-data">
 
-                      </div>
+                <p>
+                  No students were detected in this video.
+                </p>
 
-                    )
-                  )}
+              </div>
 
-                </div>
-
-              ) : (
-
-                <div className="no-data">
-
-                  <p>
-                    No faces were detected in
-                    this video.
-                  </p>
-
-                </div>
-
-              )}
-
-            </div>
+            )}
 
           </div>
 
