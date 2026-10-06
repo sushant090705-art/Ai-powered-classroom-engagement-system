@@ -655,3 +655,46 @@
     width: 100%;
   }
 }
+
+/* ---------- Saved-report banner ---------- */
+
+.saved-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 14px 18px;
+  border: 1px solid var(--accent-color);
+  border-radius: 14px;
+  background: var(--accent-light);
+  color: var(--text-primary);
+}
+
+.saved-banner > div {
+  flex: 1;
+}
+
+.saved-banner strong {
+  display: block;
+}
+
+.saved-banner span {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.saved-banner button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 9px;
+  background: var(--accent-color);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.saved-banner button.ghost {
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+}

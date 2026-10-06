@@ -341,6 +341,20 @@ class StudentRegistry:
 
     # --------------------------------------------------------
 
+    def rename(self, student_id, name):
+
+        with self._lock:
+
+            rec = self._students.get(student_id)
+
+            if rec is None:
+                return False
+
+            rec["name"] = name
+            return True
+
+    # --------------------------------------------------------
+
     def _build_report(self, rec):
 
         # ---- emotion ------------------------------------------------

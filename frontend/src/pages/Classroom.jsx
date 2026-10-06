@@ -25,6 +25,7 @@ function Classroom() {
   const [cameraLoading, setCameraLoading] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
+  const [savedReport, setSavedReport] = useState(null);
 
   // =========================
   // EMOTION
@@ -128,6 +129,7 @@ function Classroom() {
       setCameraConnected(true);
       setCameraOn(true);
       setActiveCameraType(data.type || mode);
+      setSavedReport(null);
 
     } catch (error) {
       console.error("Camera connection error:", error);
@@ -151,12 +153,11 @@ function Classroom() {
 
   const disconnectCamera = async () => {
     try {
-      await fetch(
-        `${BACKEND_URL}/camera/disconnect`,
-        {
-          method: "POST",
-        }
-      );
+      const response = await fetch(`${BACKEND_URL}/camera/disconnect`, {
+        method: "POST",
+      });
+      const data = await response.json().catch(() => ({}));
+      setSavedReport(data.report || { none: true });
     } catch (error) {
       console.error(
         "Camera disconnect error:",
@@ -387,6 +388,37 @@ function Classroom() {
       ========================= */}
 
       <main className="classroom-content">
+
+        {savedReport && (
+          <div className="saved-banner" role="status">
+            <div>
+              <strong>
+                {savedReport.none
+                  ? "No report saved"
+                  : "Session report saved"}
+              </strong>
+              <span>
+                {savedReport.none
+                  ? "No students were detected in this session."
+                  : `${savedReport.students_total} students, class engagement ${savedReport.class_average_engagement}%.`}
+              </span>
+            </div>
+
+            {!savedReport.none && (
+              <button onClick={() => navigate("/analytics")}>
+                View report
+              </button>
+            )}
+
+            <button
+              className="ghost"
+              onClick={() => setSavedReport(null)}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* =========================
             PAGE HEADING

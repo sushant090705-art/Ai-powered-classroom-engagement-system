@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
+import SessionReports from "../components/SessionReports";
 import "./Analytics.css";
 
 const BACKEND_URL = "http://127.0.0.1:5000";
@@ -300,20 +301,6 @@ function Analytics() {
                   Peak: {analytics.peak_students ?? 0}
                 </span>
               </div>
-
-              <div className="analytics-card">
-                <small>SESSION DURATION</small>
-
-                <strong>
-                  {analytics.duration || "00:00"}
-                </strong>
-
-                <span>
-                  {analytics.session_active
-                    ? "Session active"
-                    : "Session inactive"}
-                </span>
-              </div>
             </div>
 
             {/* ENGAGEMENT TREND */}
@@ -586,6 +573,9 @@ function Analytics() {
             </section>
           </>
         )}
+
+        {/* SAVED REPORTS (one per finished live session) */}
+        <SessionReports backendUrl={BACKEND_URL} />
       </main>
     </div>
   );

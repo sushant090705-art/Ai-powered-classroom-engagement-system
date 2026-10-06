@@ -26,6 +26,7 @@ from analytics import (
     start_analytics_session,
     record_ai_results
 )
+from student_reports import StudentRegistry
 
 
 
@@ -41,6 +42,28 @@ last_person_boxes = []
 
 ai_thread = None
 ai_running = False
+
+# One record per tracked student for the current live session.
+student_registry = StudentRegistry()
+
+
+def update_student_registry(person_boxes, results):
+    """Feed this cycle's detections into the per-student registry."""
+
+    detections = [
+        (
+            (r["x"], r["y"], r["width"], r["height"]),
+            {
+                "emotion": r["emotion"],
+                "confidence": r["confidence"],
+                "eye_state": r["eye_state"],
+                "eye_confidence": r["eye_confidence"],
+            },
+        )
+        for r in results
+    ]
+
+    student_registry.update(detections)
 
 
 def set_latest_frame(frame):
@@ -694,6 +717,7 @@ def start_ai_thread():
         return
 
     start_analytics_session()
+    student_registry.reset()
 
     ai_running = True
 

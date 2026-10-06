@@ -6,6 +6,7 @@ import threading
 import time
 
 from eye_tracking import reset_eye_tracks
+from reports import save_session_report
 
 from ai_processing import (
     start_ai_thread,
@@ -442,6 +443,13 @@ def disconnect_camera():
 
     stop_ai_thread()
 
+    # Build and store the final report for the session that just ended.
+    try:
+        saved_report = save_session_report()
+    except Exception as e:
+        print("Could not save session report:", e)
+        saved_report = None
+
     with camera_lock:
 
         if camera is not None:
@@ -474,7 +482,10 @@ def disconnect_camera():
         "success": True,
 
         "message":
-            "Camera disconnected"
+            "Camera disconnected",
+
+        "report":
+            saved_report
 
     })
 

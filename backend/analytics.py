@@ -497,3 +497,39 @@ def reset_analytics():
             "Analytics session reset successfully."
 
     })
+
+
+# ============================================================
+# SNAPSHOT (used when a session report is saved)
+# ============================================================
+
+def get_session_snapshot():
+    """Plain-dict summary of the current session, or None if none started."""
+
+    with analytics_lock:
+
+        if session_started_at is None:
+            return None
+
+        def percentages(counter):
+            total = sum(counter.values())
+            if not total:
+                return {}
+            return {k: round(v / total * 100) for k, v in counter.items()}
+
+        return {
+            "started_at": session_started_at,
+            "total_samples": total_samples,
+            "peak_students": peak_students,
+            "overall_engagement": (
+                round(sum(engagement_values) / len(engagement_values))
+                if engagement_values else 0
+            ),
+            "attention": (
+                round(sum(attention_values) / len(attention_values))
+                if attention_values else 0
+            ),
+            "emotion_distribution": percentages(emotion_counter),
+            "attention_distribution": percentages(eye_counter),
+            "engagement_trend": list(trend_data),
+        }
