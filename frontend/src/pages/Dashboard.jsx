@@ -90,6 +90,51 @@ function buildTrend(trend) {
   };
 }
 
+// Card that tilts toward the pointer. The outer wrapper plays the entrance
+// animation; the inner element does the 3D tilt (so they never fight).
+function Tilt({ className = "", index = 0, children }) {
+  const ref = useRef(null);
+
+  const enabled =
+    typeof window !== "undefined" &&
+    !prefersReducedMotion() &&
+    !window.matchMedia?.("(pointer: coarse)").matches;
+
+  const handleMove = (event) => {
+    const el = ref.current;
+    if (!enabled || !el) return;
+
+    const box = el.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width;
+    const y = (event.clientY - box.top) / box.height;
+
+    el.style.setProperty("--ry", `${(x - 0.5) * 14}deg`);
+    el.style.setProperty("--rx", `${(0.5 - y) * 14}deg`);
+    el.style.setProperty("--gx", `${x * 100}%`);
+    el.style.setProperty("--gy", `${y * 100}%`);
+  };
+
+  const handleLeave = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.setProperty("--rx", "0deg");
+    el.style.setProperty("--ry", "0deg");
+  };
+
+  return (
+    <div className="db-tilt-wrap rise" style={{ "--i": index }}>
+      <div
+        ref={ref}
+        className={`${className} db-tilt`}
+        onMouseMove={handleMove}
+        onMouseLeave={handleLeave}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const navigate = useNavigate();
 
@@ -209,6 +254,14 @@ function Dashboard() {
             </p>
           </div>
 
+          <div className="db-cube-scene" aria-hidden="true">
+            <div className="db-cube">
+              {["😊", "😐", "😮", "😴", "👁️", "📊"].map((face, i) => (
+                <span key={i} className={`db-face f${i}`}>{face}</span>
+              ))}
+            </div>
+          </div>
+
           <div className="db-heading-actions">
             <button
               className={`db-refresh ${refreshing ? "spinning" : ""}`}
@@ -240,7 +293,7 @@ function Dashboard() {
 
         {/* ---------- Hero: ring + trend ---------- */}
         <section className="db-hero">
-          <div className="db-card db-ring-card rise" style={{ "--i": 1 }}>
+          <Tilt className="db-card db-ring-card" index={1}>
             <div className={`db-ring ${level.tone} ${live ? "is-live" : ""}`}>
               <svg viewBox="0 0 200 200" role="img" aria-label={`Engagement ${engagement} percent`}>
                 <circle className="db-orbit" cx="100" cy="100" r="96" />
@@ -265,9 +318,9 @@ function Dashboard() {
             <p className={`db-level ${live ? level.tone : ""}`}>
               {live ? level.label : "Waiting for a session"}
             </p>
-          </div>
+          </Tilt>
 
-          <div className="db-card db-trend-card rise" style={{ "--i": 2 }}>
+          <Tilt className="db-card db-trend-card" index={2}>
             <div className="db-card-head">
               <div>
                 <h2>Engagement over time</h2>
@@ -320,7 +373,7 @@ function Dashboard() {
                 </p>
               </div>
             )}
-          </div>
+          </Tilt>
         </section>
 
         {/* ---------- Key numbers ---------- */}
@@ -329,14 +382,14 @@ function Dashboard() {
             { icon: "👁️", label: "Attention", value: dash(`${attentionShown}%`), hint: "Based on open and closed eyes" },
             { icon: "👥", label: "Students in view", value: dash(inViewShown), hint: "Faces the camera sees now" },
             { icon: "🏔️", label: "Most at once", value: dash(peakShown), hint: "Highest count this session" },
-            ,
+           ,
           ].map((tile, index) => (
-            <div className="db-card db-tile rise" style={{ "--i": 3 + index }} key={tile.label}>
+            <Tilt className="db-card db-tile" index={3 + index} key={tile.label}>
               <span className="db-tile-icon" aria-hidden="true">{tile.icon}</span>
               <small>{tile.label}</small>
               <strong>{tile.value}</strong>
               <em>{tile.hint}</em>
-            </div>
+            </Tilt>
           ))}
         </section>
 

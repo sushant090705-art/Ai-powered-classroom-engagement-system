@@ -528,7 +528,7 @@
 
 .db-tiles {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
   margin-top: 20px;
 }
@@ -667,16 +667,16 @@
     grid-template-columns: 1fr;
   }
 
-  .db-tiles {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .db-actions {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 600px) {
+  .db-tiles {
+    grid-template-columns: 1fr;
+  }
+
   .db-heading {
     flex-direction: column;
     align-items: flex-start;
@@ -713,5 +713,166 @@
 
   .db-line {
     stroke-dashoffset: 0;
+  }
+}
+
+
+/* ============================================================
+   3D EFFECTS
+============================================================ */
+
+/* ---------- Tilt cards ---------- */
+
+.db-tilt-wrap {
+  display: flex;
+  perspective: 900px;
+}
+
+.db-tilt {
+  --rx: 0deg;
+  --ry: 0deg;
+  --gx: 50%;
+  --gy: 50%;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* backdrop-filter would flatten the 3D layers */
+  backdrop-filter: none;
+  background: var(--bg-card);
+  will-change: transform;
+}
+
+.db-tilt:hover {
+  transition-duration: 0.08s;
+  box-shadow: 0 30px 50px -22px var(--shadow-color);
+}
+
+/* Light that follows the pointer */
+.db-tilt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle at var(--gx) var(--gy),
+    rgba(255, 255, 255, 0.22),
+    transparent 55%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.db-tilt:hover::after {
+  opacity: 1;
+}
+
+/* Content floats above the card surface */
+.db-ring {
+  transform: translateZ(46px);
+}
+
+.db-level {
+  transform: translateZ(28px);
+}
+
+.db-tile-icon {
+  transform: translateZ(30px);
+}
+
+.db-tile strong {
+  transform: translateZ(22px);
+}
+
+.db-card-head h2 {
+  transform: translateZ(20px);
+}
+
+/* ---------- Rotating emotion cube ---------- */
+
+.db-cube-scene {
+  position: relative;
+  flex-shrink: 0;
+  width: 84px;
+  height: 84px;
+  margin: 0 auto;
+  perspective: 520px;
+  animation: db-bob 5s ease-in-out infinite;
+}
+
+.db-cube-scene::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -26px;
+  width: 70px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  filter: blur(10px);
+  opacity: 0.35;
+  transform: translateX(-50%);
+}
+
+.db-cube {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: db-cube 18s linear infinite;
+}
+
+.db-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-light);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 82%, var(--accent-color));
+  font-size: 36px;
+  backface-visibility: hidden;
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+.db-face.f0 { transform: translateZ(42px); }
+.db-face.f1 { transform: rotateY(180deg) translateZ(42px); }
+.db-face.f2 { transform: rotateY(90deg) translateZ(42px); }
+.db-face.f3 { transform: rotateY(-90deg) translateZ(42px); }
+.db-face.f4 { transform: rotateX(90deg) translateZ(42px); }
+.db-face.f5 { transform: rotateX(-90deg) translateZ(42px); }
+
+@keyframes db-cube {
+  0% { transform: rotateX(-24deg) rotateY(0deg); }
+  50% { transform: rotateX(-6deg) rotateY(180deg); }
+  100% { transform: rotateX(-24deg) rotateY(360deg); }
+}
+
+@keyframes db-bob {
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (max-width: 960px) {
+  .db-cube-scene {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .db-tilt {
+    transform: none;
+  }
+
+  .db-ring,
+  .db-level,
+  .db-tile-icon,
+  .db-tile strong,
+  .db-card-head h2 {
+    transform: none;
   }
 }
