@@ -26,6 +26,7 @@ def register():
 
     if existing_user:
         return jsonify({
+            "success": False,
             "message": "User already exists"
         }), 409
 
@@ -36,6 +37,7 @@ def register():
     })
 
     return jsonify({
+        "success": True,
         "message": "Registration successful"
     }), 201
 
@@ -65,5 +67,6 @@ def login():
         }), 401
 
     return jsonify({
-        "message": "Login successful"
+    "success": True,
+    "message": "Login successful"
     }), 200
