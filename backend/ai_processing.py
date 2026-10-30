@@ -27,6 +27,11 @@ from analytics import (
     record_ai_results
 )
 from student_reports import StudentRegistry
+from alerts import (
+    start_alert_session,
+    end_alert_session,
+    evaluate_alerts,
+)
 
 
 
@@ -684,7 +689,25 @@ def ai_processing_loop():
         results = process_frame(
             frame_copy
         )
+        
         record_ai_results(results)
+
+        # Module 5: check alert rules every cycle, even when no face was
+        # found (an empty classroom / absent teacher must still be seen).
+        try:
+
+            evaluate_alerts(
+                list(last_person_boxes),
+                results,
+                frame_copy.shape
+            )
+
+        except Exception as alert_error:
+
+            print(
+                "Alert evaluation error:",
+                alert_error
+            )
 
         with results_lock:
 
@@ -717,6 +740,7 @@ def start_ai_thread():
         return
 
     start_analytics_session()
+    start_alert_session()
     student_registry.reset()
 
     ai_running = True
@@ -733,3 +757,4 @@ def stop_ai_thread():
     global ai_running
 
     ai_running = False
+    end_alert_session()

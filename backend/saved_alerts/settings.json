@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "teacher_check_enabled": true,
+  "teacher_zone": {
+    "x1": 0.65,
+    "y1": 0.77,
+    "x2": 1.0,
+    "y2": 1.0
+  },
+  "teacher_absent_seconds": 20,
+  "disengagement_threshold": 50,
+  "disengagement_seconds": 120,
+  "drowsy_share_threshold": 30,
+  "drowsy_seconds": 60,
+  "min_students": 2,
+  "smoothing_seconds": 20,
+  "schedule_enforced": true,
+  "schedule": {
+    "days": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "start": "09:00",
+    "end": "17:00"
+  },
+  "notify_email": "sushant090705@gmail.com"
+}

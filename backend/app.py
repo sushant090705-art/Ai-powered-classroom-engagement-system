@@ -18,6 +18,7 @@ def create_app():
     from recorded_video import recorded_video_bp
     from analytics import analytics_bp
     from reports import reports_bp
+    from alerts import alerts_bp  
    
 
     app.register_blueprint(auth_bp)
@@ -25,7 +26,7 @@ def create_app():
     app.register_blueprint(recorded_video_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(reports_bp)
-  
+    app.register_blueprint(alerts_bp)
 
     @app.route("/")
     def home():

@@ -1,0 +1,749 @@
+/* =========================================================
+   ALERTS PAGE (Module 5)
+   Uses the shared theme tokens from index.css, so it follows
+   the light / dark toggle like the other pages.
+========================================================= */
+
+.al-page {
+  --al-critical: #dc2626;
+  --al-warning: #d97706;
+  --al-good: #16a34a;
+
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .al-page {
+  --al-critical: #f87171;
+  --al-warning: #fbbf24;
+  --al-good: #4ade80;
+}
+
+/* ---------- navigation ---------- */
+
+.al-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 70px;
+  padding: 0 6%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.al-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.al-logo b {
+  font-weight: inherit;
+}
+
+.al-logo span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--accent-color);
+  color: #fff;
+  font-size: 17px;
+}
+
+.al-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ---------- buttons ---------- */
+
+.al-btn {
+  padding: 9px 16px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.al-btn:hover:not(:disabled) {
+  border-color: var(--accent-color);
+  background: var(--bg-hover);
+}
+
+.al-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.al-btn--primary {
+  border-color: var(--accent-color);
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.al-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.al-btn--danger {
+  color: var(--al-critical);
+}
+
+.al-btn--danger:hover:not(:disabled) {
+  border-color: var(--al-critical);
+}
+
+.al-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-color);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.al-btn:focus-visible,
+.al-link:focus-visible,
+.al-field input:focus-visible,
+.al-switch input:focus-visible,
+.al-day input:focus-visible {
+  outline: 3px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* ---------- layout ---------- */
+
+.al-content {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 36px 24px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.al-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.al-heading h1 {
+  margin: 12px 0 6px;
+  font-size: 32px;
+  letter-spacing: -0.8px;
+}
+
+.al-heading p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.al-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--bg-status);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.al-state i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.al-state--live i {
+  background: var(--al-good);
+}
+
+.al-state--off i {
+  background: var(--al-critical);
+}
+
+.al-banner {
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.al-banner--error {
+  border-color: var(--al-critical);
+  background: color-mix(in srgb, var(--al-critical) 10%, var(--bg-card));
+}
+
+/* ---------- live status ---------- */
+
+.al-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.al-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  border: 1px solid var(--border-color);
+  border-left-width: 4px;
+  border-radius: 14px;
+  background: var(--bg-card);
+}
+
+.al-stat small {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.al-stat strong {
+  font-size: 24px;
+  letter-spacing: -0.4px;
+}
+
+.al-stat em {
+  min-height: 1.2em;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-style: normal;
+}
+
+.al-stat.good {
+  border-left-color: var(--al-good);
+}
+
+.al-stat.mid {
+  border-left-color: var(--al-warning);
+}
+
+.al-stat.bad {
+  border-left-color: var(--al-critical);
+}
+
+/* ---------- sections ---------- */
+
+.al-section {
+  padding: 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  background: var(--bg-card);
+}
+
+.al-section-head {
+  margin-bottom: 18px;
+}
+
+.al-section-head--row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.al-section-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+  font-size: 20px;
+  letter-spacing: -0.3px;
+}
+
+.al-section-head p {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.al-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--al-critical);
+  color: #fff;
+  font-size: 13px;
+}
+
+.al-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px;
+  border: 1px dashed var(--border-light);
+  border-radius: 12px;
+  color: var(--text-secondary);
+}
+
+.al-empty strong {
+  color: var(--text-primary);
+}
+
+/* ---------- active alerts ---------- */
+
+.al-alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.al-alert {
+  --sev: var(--accent-color);
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--sev) 45%, var(--border-color));
+  border-left: 5px solid var(--sev);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sev) 7%, var(--bg-card));
+}
+
+.al-alert--critical {
+  --sev: var(--al-critical);
+}
+
+.al-alert--warning {
+  --sev: var(--al-warning);
+}
+
+.al-alert-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.al-alert-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.al-alert h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.al-sev {
+  padding: 2px 9px;
+  border-radius: 6px;
+  background: var(--sev);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+[data-theme="dark"] .al-sev,
+[data-theme="dark"] .al-count {
+  color: #0b0f19;
+}
+
+.al-alert p {
+  margin: 8px 0 6px;
+  line-height: 1.5;
+}
+
+.al-alert small {
+  color: var(--text-muted);
+}
+
+.al-alert-recs {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-divider);
+}
+
+.al-alert-recs h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ---------- recommendations ---------- */
+
+.al-rec-list,
+.al-alert-recs ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.al-rec {
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--accent-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+.al-rec--high {
+  border-left-color: var(--al-critical);
+}
+
+.al-rec--medium {
+  border-left-color: var(--al-warning);
+}
+
+.al-rec--low {
+  border-left-color: var(--al-good);
+}
+
+.al-rec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.al-tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.al-rec p {
+  margin: 6px 0 4px;
+  color: var(--text-secondary);
+}
+
+.al-rec small {
+  color: var(--text-muted);
+}
+
+/* ---------- history ---------- */
+
+.al-history {
+  display: flex;
+  flex-direction: column;
+}
+
+.al-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-divider);
+}
+
+.al-row:first-child {
+  border-top: 0;
+}
+
+.al-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-color);
+}
+
+.al-dot--critical {
+  background: var(--al-critical);
+}
+
+.al-dot--warning {
+  background: var(--al-warning);
+}
+
+.al-row-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.al-row-main span {
+  color: var(--text-secondary);
+}
+
+.al-row-main small {
+  color: var(--text-muted);
+}
+
+/* ---------- settings form ---------- */
+
+.al-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.al-form fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+}
+
+.al-form legend {
+  padding: 0 8px;
+  font-weight: 700;
+}
+
+.al-hint {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.al-switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.al-switch input,
+.al-day input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-color);
+}
+
+.al-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+}
+
+.al-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.al-field-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.al-field-input em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.al-field input {
+  width: 100%;
+  max-width: 220px;
+  padding: 9px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 400;
+}
+
+.al-field input[type="email"] {
+  max-width: 380px;
+}
+
+.al-field input:disabled {
+  opacity: 0.5;
+}
+
+/* teacher zone */
+
+.al-zone-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.al-zone-preview {
+  position: relative;
+  flex-shrink: 0;
+  width: 220px;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.al-zone-preview > span {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.al-zone-rect {
+  position: absolute;
+  border: 2px solid var(--al-warning);
+  background: color-mix(in srgb, var(--al-warning) 22%, transparent);
+}
+
+.al-zone-controls {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.al-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.al-edges {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.al-edges .al-field input {
+  max-width: 90px;
+}
+
+/* schedule */
+
+.al-schedule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 24px;
+}
+
+.al-schedule.is-off {
+  opacity: 0.55;
+}
+
+.al-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.al-day {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.al-form-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.al-form-message {
+  font-weight: 600;
+}
+
+.al-form-message--ok {
+  color: var(--al-good);
+}
+
+.al-form-message--error {
+  color: var(--al-critical);
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .al-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .al-nav {
+    padding: 0 16px;
+  }
+
+  .al-nav-right {
+    gap: 8px;
+  }
+
+  .al-logo b {
+    display: none;
+  }
+
+  .al-content {
+    padding: 24px 16px 60px;
+  }
+
+  .al-heading {
+    flex-direction: column;
+  }
+
+  .al-heading h1 {
+    font-size: 26px;
+  }
+
+  .al-status,
+  .al-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .al-edges {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .al-alert {
+    flex-direction: column;
+  }
+
+  .al-section {
+    padding: 18px;
+  }
+}

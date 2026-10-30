@@ -143,6 +143,7 @@ function Dashboard() {
   const [ringReady, setRingReady] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [alertCount, setAlertCount] = useState(0);
 
   // Fetch real session numbers from the backend.
   const load = useCallback(async () => {
@@ -154,6 +155,17 @@ function Dashboard() {
       setOffline(false);
     } catch {
       setOffline(true);
+    }
+
+    // Module 5: number of alerts nobody has acknowledged yet.
+    try {
+      const alertResponse = await fetch(`${BACKEND_URL}/alerts/status`);
+      if (alertResponse.ok) {
+        const alertStatus = await alertResponse.json();
+        setAlertCount(Number(alertStatus.unacknowledged_count) || 0);
+      }
+    } catch {
+      // Backend offline: the offline state is already shown above.
     }
   }, []);
 
@@ -399,6 +411,7 @@ function Dashboard() {
             { icon: "🎥", title: "Live classroom", text: "Watch the camera feed with emotion and eye tracking.", to: "/classroom", primary: true },
             { icon: "📼", title: "Analyze a recording", text: "Upload a class video and get a report per student.", to: "/recorded-video" },
             { icon: "📊", title: "Full analytics", text: "Emotion mix, attention breakdown and insights.", to: "/analytics" },
+            { icon: "🔔", title: "Alerts", text: "Teacher absence, low engagement and suggested actions.", to: "/alerts", badge: alertCount },
           ].map((action, index) => (
             <button
               key={action.to}
@@ -411,6 +424,11 @@ function Dashboard() {
                 <strong>{action.title}</strong>
                 <em>{action.text}</em>
               </span>
+              {action.badge > 0 && (
+                <span className="db-badge" aria-label={`${action.badge} unacknowledged alerts`}>
+                  {action.badge}
+                </span>
+              )}
               <span className="db-action-arrow" aria-hidden="true">→</span>
             </button>
           ))}

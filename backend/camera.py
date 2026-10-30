@@ -7,6 +7,7 @@ import time
 
 from eye_tracking import reset_eye_tracks
 from reports import save_session_report
+from alerts import draw_teacher_zone
 
 from ai_processing import (
     start_ai_thread,
@@ -670,6 +671,19 @@ def generate_frames():
 
                 2
             )
+                # ====================================================
+        # TEACHER ZONE (Module 5, only while teacher check is on)
+        # ====================================================
+
+        try:
+
+            draw_teacher_zone(
+                frame
+            )
+
+        except Exception:
+
+            pass    
 
         # ====================================================
         # ENCODE JPEG
