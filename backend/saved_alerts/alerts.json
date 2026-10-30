@@ -1,20 +1,3 @@
 {
-  "alerts": [
-    {
-      "id": "43c16f0936cb49a081af58a93b817d1d",
-      "type": "TEST",
-      "severity": "info",
-      "title": "Test alert",
-      "message": "This is a test alert. Acknowledge it to close it.",
-      "details": {},
-      "recommendations": [],
-      "status": "resolved",
-      "started_at": 1793294126.675994,
-      "resolved_at": 1793294127.419879,
-      "resolved_reason": "outside_schedule",
-      "acknowledged": false,
-      "acknowledged_at": null,
-      "session_started_at": 1793294094.6442122
-    }
-  ]
+  "alerts": []
 }
