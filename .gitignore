@@ -21,3 +21,5 @@ dist/
 
 # Environment variables
 .env
+# Generated classroom reports
+backend/saved_reports/
