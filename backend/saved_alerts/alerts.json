@@ -1,3 +1,30 @@
 {
-  "alerts": []
+  "alerts": [
+    {
+      "id": "4f60ccfb8ca7435a94c7a4101de7a829",
+      "type": "TEACHER_ABSENT",
+      "severity": "critical",
+      "title": "Teacher not detected",
+      "message": "No one was detected in the teacher area for 20 s while the class session was running.",
+      "details": {
+        "seconds": 20
+      },
+      "recommendations": [
+        {
+          "id": "teacher-absent",
+          "priority": "high",
+          "title": "Check on the scheduled faculty member",
+          "detail": "Contact the teacher or the department coordinator, and arrange a substitute or supervision if the class is unattended.",
+          "reason": "No one was seen in the teacher area for 25 s."
+        }
+      ],
+      "status": "resolved",
+      "started_at": 1793525579.3375127,
+      "resolved_at": 1793525611.8200238,
+      "resolved_reason": "session_ended",
+      "acknowledged": false,
+      "acknowledged_at": null,
+      "session_started_at": 1793525506.5834844
+    }
+  ]
 }

@@ -8,6 +8,7 @@ import time
 from eye_tracking import reset_eye_tracks
 from reports import save_session_report
 from alerts import draw_teacher_zone
+from analytics import annotate_engagement
 
 from ai_processing import (
     start_ai_thread,
@@ -751,6 +752,11 @@ def emotion_results():
     if results_copy is None:
 
         results_copy = []
+
+    # Single source of truth for the per-student score (analytics.py).
+    results_copy = annotate_engagement(
+        results_copy
+    )
 
     return jsonify({
 

@@ -259,33 +259,16 @@ function Classroom() {
   // INDIVIDUAL ENGAGEMENT
   // =========================
 
+  // The score comes from the backend (analytics.py) so the Classroom page,
+  // Dashboard and Analytics always agree.
   const getIndividualEngagement = (face) => {
     if (!face) return 0;
 
-    const emotionName = String(face.emotion || "").toLowerCase();
-    const eyeState = String(face.eye_state || "").toLowerCase();
-    const emotionConfidence = Math.max(0, Math.min(100, Number(face.confidence) || 0));
-    const eyeConfidence = Math.max(0, Math.min(100, Number(face.eye_confidence) || 0));
+    const score = Number(face.engagement);
 
-    let score = 50;
-
-    if (eyeState === "open") score += 25;
-    else if (eyeState === "blink") score += 18;
-    else if (eyeState === "close") score -= 20;
-    else if (eyeState === "drowsy") score -= 30;
-    else if (eyeState === "sleeping") score -= 40;
-
-    if (emotionName === "happy") score += 15;
-    else if (emotionName === "neutral") score += 10;
-    else if (emotionName === "surprise") score += 3;
-    else if (emotionName === "fear" || emotionName === "angry") score -= 5;
-    else if (emotionName === "sad") score -= 12;
-    else if (emotionName === "disgust") score -= 8;
-
-    const confidenceBonus = ((emotionConfidence + eyeConfidence) / 2 - 50) * 0.10;
-    score += confidenceBonus;
-
-    return Math.round(Math.max(0, Math.min(100, score)));
+    return Number.isFinite(score)
+      ? Math.round(Math.max(0, Math.min(100, score)))
+      : 0;
   };
 
   const getIndividualStatus = (score) => {

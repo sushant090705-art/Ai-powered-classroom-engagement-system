@@ -27,6 +27,7 @@ session_started_at = None
 
 total_samples = 0
 peak_students = 0
+current_students = 0      # faces seen in the most recent AI cycle
 
 engagement_values = []
 attention_values = []
@@ -127,6 +128,38 @@ def calculate_attention_score(result):
     )
 
 
+def engagement_level(score):
+    """Engaged / Moderate / Low - same cut-offs everywhere in the app."""
+
+    if score >= 75:
+        return "Engaged"
+
+    if score >= 50:
+        return "Moderate"
+
+    return "Low"
+
+
+def annotate_engagement(faces):
+    """Return copies of the face results with 'engagement' (0-100) and
+    'engagement_level' added, so the frontend never has to re-implement
+    the formula. The shared results list is left untouched."""
+
+    annotated = []
+
+    for face in faces or []:
+
+        item = dict(face)
+        score = calculate_engagement_score(item)
+
+        item["engagement"] = score
+        item["engagement_level"] = engagement_level(score)
+
+        annotated.append(item)
+
+    return annotated
+
+
 # ============================================================
 # START SESSION
 # ============================================================
@@ -135,6 +168,7 @@ def start_analytics_session():
     global session_started_at
     global total_samples
     global peak_students
+    global current_students
     global last_trend_time
 
     with analytics_lock:
@@ -143,6 +177,7 @@ def start_analytics_session():
 
         total_samples = 0
         peak_students = 0
+        current_students = 0
 
         engagement_values.clear()
         attention_values.clear()
@@ -168,9 +203,14 @@ def record_ai_results(results):
 
     global total_samples
     global peak_students
+    global current_students
     global last_trend_time
 
     if not results:
+        # Nobody visible this cycle: the live count must drop to 0,
+        # but averages are left untouched.
+        with analytics_lock:
+            current_students = 0
         return
 
     now = time.time()
@@ -190,7 +230,7 @@ def record_ai_results(results):
 
         peak_students = max(
             peak_students,
-            current_students
+            len(results)
         )
 
         # ----------------------------------------------------
@@ -362,19 +402,8 @@ def get_analytics():
         # CURRENT ACTIVE STUDENTS
         # ----------------------------------------------------
 
-        active_students = 0
-
-        if total_samples > 0:
-
-            # Last known sample
-            # is represented by the latest trend/sample state.
-
-            # We calculate this from the latest recorded
-            # frame through the current counters.
-            active_students = min(
-                peak_students,
-                max(0, peak_students)
-            )
+        # Real count from the latest AI cycle (0 when nobody is visible).
+        active_students = current_students
 
         # ----------------------------------------------------
         # DURATION
