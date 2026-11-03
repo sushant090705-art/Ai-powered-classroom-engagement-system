@@ -13,6 +13,7 @@ turns the per-frame detections into per-student reports:
     (analytics.py), via student_reports.py.
 """
 
+import logging
 from flask import Blueprint, request, jsonify
 import os
 import time
@@ -33,6 +34,8 @@ from student_reports import (
     StudentRegistry,
     box_iou,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -463,11 +466,7 @@ def _remove_file(path):
 
         except Exception as e:
 
-            print(
-                "Could not delete "
-                "temporary video:",
-                e
-            )
+            logger.warning("Could not delete temporary video: %s", e)
 
 
 def _video_job_worker(job_id, video_path):
@@ -499,7 +498,7 @@ def _video_job_worker(job_id, video_path):
 
     except Exception as e:
 
-        print("VIDEO ANALYSIS ERROR:", e)
+        logger.exception("Video analysis error")
 
         with video_jobs_lock:
 
@@ -647,10 +646,7 @@ def analyze_video():
 
     except Exception as e:
 
-        print(
-            "VIDEO ANALYSIS ERROR:",
-            e
-        )
+        logger.exception("Video analysis error")
 
         return jsonify({
             "success":
@@ -698,6 +694,4 @@ def analyze_video_status(job_id):
         })
 
 
-print(
-    "Recorded video module loaded successfully!"
-)
+logger.debug("Recorded video module loaded successfully!")

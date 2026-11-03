@@ -4,6 +4,7 @@ This module owns all MRL eye-model inference and temporal eye-state logic.
 It is shared by live-camera and recorded-video processing.
 """
 
+import logging
 import os
 import time
 import threading
@@ -12,15 +13,17 @@ import cv2
 import numpy as np
 import tensorflow as tf
 
+logger = logging.getLogger(__name__)
+
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MRL_MODEL_PATH = os.path.join(
     BASE_DIR, "ai-model", "models", "mrl_eye_model.keras"
 )
 
-print("Loading MRL eye model...")
+logger.info("Loading MRL eye model...")
 mrl_eye_model = tf.keras.models.load_model(MRL_MODEL_PATH)
-print("MRL eye model loaded successfully!")
+logger.info("MRL eye model loaded successfully!")
 
 
 # Eye-state thresholds (seconds)
@@ -55,7 +58,7 @@ def predict_eye_state(eye_image):
         return "Close", prediction * 100.0
 
     except Exception as exc:
-        print("MRL prediction error:", exc)
+        logger.error("MRL prediction error: %s", exc)
         return "Unknown", 0.0
 
 

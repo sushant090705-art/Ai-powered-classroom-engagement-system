@@ -6,6 +6,7 @@ The routes below list, open and delete those reports. The live student
 routes (/students/...) are here too.
 """
 
+import logging
 import json
 import os
 import re
@@ -17,6 +18,8 @@ from flask import Blueprint, jsonify, request
 
 from analytics import get_session_snapshot
 from ai_processing import student_registry
+
+logger = logging.getLogger(__name__)
 
 
 reports_bp = Blueprint("reports", __name__)
@@ -150,7 +153,7 @@ def list_reports():
                 ) as handle:
                     summaries.append(_summary(json.load(handle)))
             except Exception as e:
-                print("Skipping unreadable report", name, e)
+                logger.warning("Skipping unreadable report %s: %s", name, e)
 
     summaries.sort(key=lambda r: r["ended_at"], reverse=True)
 

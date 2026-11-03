@@ -4,6 +4,7 @@ The Flask routes live in camera.py. This module contains only the AI/state
 logic used by those routes.
 """
 
+import logging
 import cv2
 import numpy as np
 import threading
@@ -32,6 +33,8 @@ from alerts import (
     end_alert_session,
     evaluate_alerts,
 )
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -448,10 +451,7 @@ def process_frame(frame, face_scale_factor=1.3):
                             raw_eye_state
                         )
                     )
-                    print(
-    f"Track {track_id} | Raw Eye: {raw_eye_state} | "
-    f"Display Eye: {eye_state}"
-)
+                    logger.debug("Track %s | Raw Eye: %s | Display Eye: %s", track_id, raw_eye_state, eye_state)
 
                 else:
 
@@ -634,10 +634,7 @@ def process_frame(frame, face_scale_factor=1.3):
 
     except Exception as e:
 
-        print(
-            "PROCESS FRAME ERROR:",
-            e
-        )
+        logger.exception("Process frame error")
 
     return results
 
@@ -646,9 +643,7 @@ def ai_processing_loop():
     global ai_running
     global latest_results
 
-    print(
-        "AI processing thread started."
-    )
+    logger.info("AI processing thread started.")
 
     last_process_time = 0
 
@@ -704,10 +699,7 @@ def ai_processing_loop():
 
         except Exception as alert_error:
 
-            print(
-                "Alert evaluation error:",
-                alert_error
-            )
+            logger.exception("Alert evaluation error")
 
         with results_lock:
 
@@ -722,14 +714,9 @@ def ai_processing_loop():
 
         except Exception as report_error:
 
-            print(
-                "Student report update error:",
-                report_error
-            )
+            logger.exception("Student report update error")
 
-    print(
-        "AI processing thread stopped."
-    )
+    logger.info("AI processing thread stopped.")
 
 def start_ai_thread():
 

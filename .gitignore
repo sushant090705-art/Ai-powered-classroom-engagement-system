@@ -23,3 +23,7 @@ dist/
 .env
 # Generated classroom reports
 backend/saved_reports/
+
+# Backend logs
+backend/logs/
+*.log

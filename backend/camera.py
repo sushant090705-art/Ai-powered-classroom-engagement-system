@@ -1,3 +1,4 @@
+import logging
 from flask import Blueprint, request, jsonify, Response
 
 import os
@@ -17,6 +18,8 @@ from ai_processing import (
     get_latest_results,
     clear_latest_results
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -74,10 +77,7 @@ def get_camera():
             not camera.isOpened()
         ):
 
-            print(
-                f"Connecting to camera "
-                f"({CAMERA_TYPE}): {source}"
-            )
+            logger.info("Connecting to camera (%s): %s", CAMERA_TYPE, source)
 
             try:
 
@@ -122,10 +122,7 @@ def get_camera():
 
             except Exception as e:
 
-                print(
-                    "Exception creating "
-                    f"VideoCapture: {e}"
-                )
+                logger.exception("Exception creating VideoCapture")
 
                 camera = None
 
@@ -156,17 +153,11 @@ def get_camera():
                 camera.isOpened()
             ):
 
-                print(
-                    f"{CAMERA_TYPE.capitalize()} "
-                    "camera connected successfully!"
-                )
+                logger.info("%s camera connected successfully!", CAMERA_TYPE.capitalize())
 
             else:
 
-                print(
-                    f"ERROR: Could not connect "
-                    f"to {CAMERA_TYPE} camera."
-                )
+                logger.error("Could not connect to %s camera.", CAMERA_TYPE)
 
                 camera = None
 
@@ -298,15 +289,9 @@ def connect_camera():
     clear_latest_results()
     reset_eye_tracks()
 
-    print("--------------------------------")
 
-    print(
-        f"Camera source updated: "
-        f"[{CAMERA_TYPE}] "
-        f"{new_source}"
-    )
+    logger.info("Camera source updated: [%s] %s", CAMERA_TYPE, new_source)
 
-    print("--------------------------------")
 
     # ========================================================
     # ACTUALLY OPEN CAMERA
@@ -449,7 +434,7 @@ def disconnect_camera():
     try:
         saved_report = save_session_report()
     except Exception as e:
-        print("Could not save session report:", e)
+        logger.exception("Could not save session report")
         saved_report = None
 
     with camera_lock:
@@ -475,9 +460,7 @@ def disconnect_camera():
     clear_latest_results()
     reset_eye_tracks()
 
-    print(
-        "Camera disconnected"
-    )
+    logger.info("Camera disconnected")
 
     return jsonify({
 
@@ -518,10 +501,7 @@ def generate_frames():
 
         if not success:
 
-            print(
-                "Could not read frame "
-                f"from camera ({CAMERA_TYPE})."
-            )
+            logger.warning("Could not read frame from camera (%s).", CAMERA_TYPE)
 
             with camera_lock:
 
@@ -772,6 +752,4 @@ def emotion_results():
     })
 
 
-print(
-    "Camera module loaded successfully!"
-)
+logger.debug("Camera module loaded successfully!")

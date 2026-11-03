@@ -34,6 +34,7 @@ Design notes
 * Alerts and settings are stored as JSON files in backend/saved_alerts/.
 """
 
+import logging
 import copy
 import json
 import os
@@ -49,6 +50,8 @@ from email.message import EmailMessage
 from flask import Blueprint, jsonify, request
 
 from analytics import calculate_engagement_score
+
+logger = logging.getLogger(__name__)
 
 
 alerts_bp = Blueprint("alerts", __name__)
@@ -1068,8 +1071,7 @@ class AlertEngine:
     @staticmethod
     def _default_notifier(alert, email):
 
-        print(f"[ALERT:{alert['severity'].upper()}] {alert['title']}: "
-              f"{alert['message']}")
+        logger.warning("[ALERT:%s] %s: %s", alert["severity"].upper(), alert["title"], alert["message"])
 
         if email:
             threading.Thread(
@@ -1085,7 +1087,7 @@ def _send_email(to_address, alert):
     host = os.environ.get("ALERT_SMTP_HOST")
 
     if not host:
-        print("Alert e-mail skipped: ALERT_SMTP_HOST is not set.")
+        logger.info("Alert e-mail skipped: ALERT_SMTP_HOST is not set.")
         return
 
     try:
@@ -1118,7 +1120,7 @@ def _send_email(to_address, alert):
             server.send_message(message)
 
     except Exception as error:
-        print("Alert e-mail failed:", error)
+        logger.error("Alert e-mail failed: %s", error)
 
 
 # ============================================================
@@ -1247,4 +1249,4 @@ def create_test_alert():
     return jsonify({"success": True, "alert": engine.send_test_alert()})
 
 
-print("Alerts module loaded successfully!")
+logger.debug("Alerts module loaded successfully!")

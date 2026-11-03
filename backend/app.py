@@ -4,10 +4,19 @@ Routes and business logic live in dedicated modules. This file only creates
 the Flask app, registers blueprints, and starts the development server.
 """
 
+import logging
 from flask import Flask
+
+from logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 
 def create_app():
+    # Must run before the blueprint imports below: they load the AI models
+    # at import time and log while doing so.
+    setup_logging()
+
     app = Flask(__name__)
 
     from flask_cors import CORS
@@ -39,12 +48,9 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    print("--------------------------------")
-    print("Classroom AI Backend")
-    print("--------------------------------")
-    print("Live Video: http://127.0.0.1:5000/video_feed")
-    print("Emotion Results: http://127.0.0.1:5000/emotion-results")
-    print("--------------------------------")
+    logger.info("Classroom AI Backend starting")
+    logger.info("Live Video: http://127.0.0.1:5000/video_feed")
+    logger.info("Emotion Results: http://127.0.0.1:5000/emotion-results")
 
     app.run(
         debug=True,
