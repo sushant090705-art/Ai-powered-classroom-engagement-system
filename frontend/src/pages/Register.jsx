@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -9,6 +10,7 @@ function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Existing backend registration logic preserved
   const handleRegister = async (e) => {
     e.preventDefault();
 
@@ -39,60 +41,156 @@ function Register() {
   };
 
   return (
-     <div className="register-page">
-       <div className="auth-theme-toggle">
-         <ThemeToggle />
-       </div>
-       <div className="register-card">
+    <div className="register-page">
 
-        <div className="register-logo">
-          ◉
-        </div>
+      <div className="register-theme-toggle">
+        <ThemeToggle />
+      </div>
 
-        <h1>Create Account</h1>
+      <div className="register-layout">
 
-        <p className="register-subtitle">
-          Create your ClassroomAI account
-        </p>
-
-        <form onSubmit={handleRegister}>
-
-          <label>Email</label>
-
-          <input
-            type="email"
-            placeholder="teacher@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-
-          <label>Password</label>
-
-          <input
-            type="password"
-            placeholder="Enter password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+        {/* LEFT SHOWCASE */}
+        <section className="register-showcase">
 
           <button
-  type="submit"
-  className="register-submit"
->
-  Create Account
-</button>
+            className="register-brand"
+            onClick={() => navigate("/")}
+          >
+            <span className="register-brand-mark">C</span>
+            <span>
+              Classroom<span>AI</span>
+            </span>
+          </button>
 
-        </form>
+          <div className="register-showcase-content">
 
-        <button
-          type="button"
-          className="back-login"
-          onClick={() => navigate("/login")}
-        >
-          Already have an account? Login
-        </button>
+            <span className="register-eyebrow">
+              GET STARTED WITH CLASSROOMAI
+            </span>
+
+            <h1>
+              A clearer view of
+              <span> classroom engagement.</span>
+            </h1>
+
+            <p>
+              Create your teacher account and access an organized
+              platform for understanding classroom attention,
+              emotion patterns and engagement insights.
+            </p>
+
+            <div className="register-benefits">
+
+              <div className="register-benefit">
+                <span>01</span>
+                <div>
+                  <strong>Simple Access</strong>
+                  <small>Your classroom tools in one place.</small>
+                </div>
+              </div>
+
+              <div className="register-benefit">
+                <span>02</span>
+                <div>
+                  <strong>AI-Powered Insights</strong>
+                  <small>Understand classroom engagement patterns.</small>
+                </div>
+              </div>
+
+              <div className="register-benefit">
+                <span>03</span>
+                <div>
+                  <strong>Organized Reports</strong>
+                  <small>Review classroom session information.</small>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div className="register-showcase-footer">
+            ClassroomAI · Intelligent classroom insights
+          </div>
+
+        </section>
+
+        {/* RIGHT REGISTRATION FORM */}
+        <section className="register-form-section">
+
+          <div className="register-card">
+
+            <div className="register-logo">+</div>
+
+            <span className="register-form-eyebrow">
+              TEACHER REGISTRATION
+            </span>
+
+            <h2>Create your account</h2>
+
+            <p className="register-subtitle">
+              Enter your details to get started.
+            </p>
+
+            <form onSubmit={handleRegister}>
+
+              <label htmlFor="register-email">
+                Email address
+              </label>
+
+              <input
+                id="register-email"
+                type="email"
+                placeholder="teacher@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+
+              <label htmlFor="register-password">
+                Password
+              </label>
+
+              <input
+                id="register-password"
+                type="password"
+                placeholder="Create your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
+                required
+              />
+
+              <button type="submit" className="register-submit">
+                Create Account
+                <span>→</span>
+              </button>
+
+            </form>
+
+            <div className="register-divider">
+              ALREADY HAVE AN ACCOUNT?
+            </div>
+
+            <button
+              type="button"
+              className="register-login"
+              onClick={() => navigate("/login")}
+            >
+              Sign In Instead
+            </button>
+
+            <button
+              type="button"
+              className="register-home"
+              onClick={() => navigate("/")}
+            >
+              ← Back to Home
+            </button>
+
+          </div>
+
+        </section>
 
       </div>
     </div>

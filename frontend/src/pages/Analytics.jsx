@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -56,17 +57,13 @@ function Analytics() {
   useEffect(() => {
     fetchAnalytics();
 
-    const interval = setInterval(() => {
-      fetchAnalytics();
-    }, 5000);
+    const interval = setInterval(fetchAnalytics, 5000);
 
     return () => clearInterval(interval);
   }, [fetchAnalytics]);
 
   const emotionEntries = useMemo(() => {
-    if (!analytics?.emotion_distribution) {
-      return [];
-    }
+    if (!analytics?.emotion_distribution) return [];
 
     return Object.entries(analytics.emotion_distribution).sort(
       (a, b) => b[1] - a[1]
@@ -74,9 +71,7 @@ function Analytics() {
   }, [analytics]);
 
   const attentionEntries = useMemo(() => {
-    if (!analytics?.attention_distribution) {
-      return [];
-    }
+    if (!analytics?.attention_distribution) return [];
 
     return Object.entries(analytics.attention_distribution).sort(
       (a, b) => b[1] - a[1]
@@ -93,9 +88,7 @@ function Analytics() {
   const getTrendHeight = (value) => {
     const numericValue = Number(value) || 0;
 
-    if (maxTrendValue <= 0) {
-      return 0;
-    }
+    if (maxTrendValue <= 0) return 0;
 
     return Math.max(
       4,
@@ -104,33 +97,19 @@ function Analytics() {
   };
 
   const getEngagementLabel = (value) => {
-    if (value >= 75) {
-      return "High engagement";
-    }
-
-    if (value >= 50) {
-      return "Moderate engagement";
-    }
-
+    if (value >= 75) return "High engagement";
+    if (value >= 50) return "Moderate engagement";
     return "Low engagement";
   };
 
   const getAttentionLabel = (value) => {
-    if (value >= 75) {
-      return "Strong attention";
-    }
-
-    if (value >= 50) {
-      return "Moderate attention";
-    }
-
+    if (value >= 75) return "Strong attention";
+    if (value >= 50) return "Moderate attention";
     return "Low attention";
   };
 
   const generateInsights = () => {
-    if (!analytics) {
-      return [];
-    }
+    if (!analytics) return [];
 
     const insights = [];
 
@@ -202,41 +181,56 @@ function Analytics() {
 
   const insights = generateInsights();
 
+  const overallEngagement = Number(analytics?.overall_engagement) || 0;
+  const overallAttention = Number(analytics?.attention) || 0;
+
   return (
     <div className="analytics-page">
-      {/* NAVIGATION */}
       <header className="analytics-nav">
-        <div className="analytics-logo">
-          <span>◉</span>
-          ClassroomAI
-        </div>
+        <button
+          className="analytics-brand"
+          onClick={() => navigate("/dashboard")}
+          aria-label="Go to dashboard"
+        >
+          <span className="brand-mark">◉</span>
+          <span>Classroom<span className="brand-light">AI</span></span>
+        </button>
 
-        <div className="analytics-nav-right">
+        <div className="analytics-nav-actions">
           <ThemeToggle />
 
-          <button onClick={() => navigate("/dashboard")}>
-            Dashboard
+          <button
+            className="nav-dashboard-btn"
+            onClick={() => navigate("/dashboard")}
+          >
+            Dashboard <span>↗</span>
           </button>
         </div>
       </header>
 
       <main className="analytics-content">
-        {/* HEADER */}
-        <div className="analytics-heading">
+        <section className="analytics-hero">
           <div>
-            <p>CLASSROOM ANALYTICS</p>
+            <div className="eyebrow">
+              <span className="eyebrow-line"></span>
+              CLASSROOM ANALYTICS
+            </div>
 
-            <h1>Engagement Overview</h1>
+            <h1>Engagement <span>Overview.</span></h1>
 
-            <span>Computer Science — AI</span>
+            <p className="analytics-subtitle">
+              Computer Science — AI
+            </p>
           </div>
 
-          <button onClick={() => navigate("/classroom")}>
-            ← Live Classroom
+          <button
+            className="live-classroom-btn"
+            onClick={() => navigate("/classroom")}
+          >
+            <span>←</span> Live Classroom
           </button>
-        </div>
+        </section>
 
-        {/* LOADING */}
         {loading && (
           <div className="analytics-status">
             <div className="analytics-spinner"></div>
@@ -244,90 +238,98 @@ function Analytics() {
           </div>
         )}
 
-        {/* ERROR */}
         {!loading && error && (
           <div className="analytics-error">
-            <strong>Analytics unavailable</strong>
+            <div>
+              <strong>Analytics unavailable</strong>
+              <p>{error}</p>
+            </div>
 
-            <p>{error}</p>
-
-            <button onClick={fetchAnalytics}>
-              Try Again
-            </button>
+            <button onClick={fetchAnalytics}>Try Again ↻</button>
           </div>
         )}
 
-        {/* ANALYTICS CONTENT */}
         {!loading && !error && analytics && (
           <>
-            {/* TOP CARDS */}
-            <div className="analytics-cards">
-              <div className="analytics-card">
-                <small>OVERALL ENGAGEMENT</small>
-
-                <strong>
-                  {Number(analytics.overall_engagement) || 0}%
-                </strong>
-
-                <span>
-                  {getEngagementLabel(
-                    Number(analytics.overall_engagement) || 0
-                  )}
-                </span>
+            <section className="metrics-section">
+              <div className="section-label">
+                <span>01</span> PERFORMANCE SNAPSHOT
               </div>
 
-              <div className="analytics-card">
-                <small>ATTENTION</small>
+              <div className="analytics-cards">
+                <article className="metric-card metric-primary">
+                  <div className="metric-top">
+                    <span>OVERALL ENGAGEMENT</span>
+                    <span className="metric-symbol">↗</span>
+                  </div>
 
-                <strong>
-                  {Number(analytics.attention) || 0}%
-                </strong>
+                  <div className="metric-value">
+                    {overallEngagement}<span>%</span>
+                  </div>
 
-                <span>
-                  {getAttentionLabel(
-                    Number(analytics.attention) || 0
-                  )}
-                </span>
+                  <div className="metric-bottom">
+                    <span className="metric-dot"></span>
+                    {getEngagementLabel(overallEngagement)}
+                  </div>
+                </article>
+
+                <article className="metric-card">
+                  <div className="metric-top">
+                    <span>ATTENTION</span>
+                    <span className="metric-symbol">◎</span>
+                  </div>
+
+                  <div className="metric-value">
+                    {overallAttention}<span>%</span>
+                  </div>
+
+                  <div className="metric-bottom">
+                    <span className="metric-dot"></span>
+                    {getAttentionLabel(overallAttention)}
+                  </div>
+                </article>
+
+                <article className="metric-card">
+                  <div className="metric-top">
+                    <span>ACTIVE STUDENTS</span>
+                    <span className="metric-symbol">◌</span>
+                  </div>
+
+                  <div className="metric-value">
+                    {analytics.active_students ?? 0}
+                  </div>
+
+                  <div className="metric-bottom">
+                    <span className="metric-dot"></span>
+                    Peak: {analytics.peak_students ?? 0}
+                  </div>
+                </article>
               </div>
+            </section>
 
-              <div className="analytics-card">
-                <small>ACTIVE STUDENTS</small>
-
-                <strong>
-                  {analytics.active_students ?? 0}
-                </strong>
-
-                <span>
-                  Peak: {analytics.peak_students ?? 0}
-                </span>
-              </div>
-            </div>
-
-            {/* ENGAGEMENT TREND */}
             <section className="chart-card">
-              <div className="chart-header">
+              <div className="section-heading">
                 <div>
-                  <small>ENGAGEMENT TREND</small>
+                  <div className="section-label">
+                    <span>02</span> REAL-TIME MONITORING
+                  </div>
 
                   <h2>Engagement Over Time</h2>
+                  <p>Classroom engagement observations</p>
                 </div>
 
                 <div className="live-indicator">
-                  <span></span>
-                  Live data
+                  <span></span> LIVE DATA
                 </div>
               </div>
 
               {trend.length === 0 ? (
                 <div className="empty-chart">
+                  <div className="empty-chart-icon">⌁</div>
+                  <h3>Waiting for AI observations</h3>
                   <p>
-                    Waiting for AI observations...
+                    Start the classroom camera to generate engagement data.
                   </p>
-
-                  <span>
-                    Start the classroom camera to generate
-                    engagement data.
-                  </span>
                 </div>
               ) : (
                 <div className="real-chart">
@@ -350,8 +352,7 @@ function Analytics() {
 
                     <div className="chart-bars">
                       {trend.map((point, index) => {
-                        const value =
-                          Number(point.value) || 0;
+                        const value = Number(point.value) || 0;
 
                         return (
                           <div
@@ -362,17 +363,13 @@ function Analytics() {
                             <div
                               className="chart-bar"
                               style={{
-                                height: `${getTrendHeight(
-                                  value
-                                )}%`,
+                                height: `${getTrendHeight(value)}%`,
                               }}
                             >
                               <span>{value}%</span>
                             </div>
 
-                            <small>
-                              {point.time}
-                            </small>
+                            <small>{point.time}</small>
                           </div>
                         );
                       })}
@@ -382,56 +379,54 @@ function Analytics() {
               )}
 
               <div className="chart-summary">
-                <span>
-                  {trend.length} observations recorded
-                </span>
+                <span>{trend.length} observations recorded</span>
 
                 {trend.length > 0 && (
                   <strong>
-                    Latest:{" "}
-                    {Number(
-                      trend[trend.length - 1].value
-                    ) || 0}
-                    %
+                    Latest reading
+                    <span>
+                      {Number(trend[trend.length - 1].value) || 0}%
+                    </span>
                   </strong>
                 )}
               </div>
             </section>
 
-            {/* DISTRIBUTIONS */}
-            <section className="analysis-grid">
-              {/* EMOTIONS */}
-              <div className="analysis-card">
-                <small>EMOTION DISTRIBUTION</small>
+            <section className="distribution-section">
+              <div className="section-label">
+                <span>03</span> CLASSROOM BEHAVIOUR
+              </div>
 
-                <h2>Classroom Mood</h2>
-
-                {emotionEntries.length === 0 ? (
-                  <div className="no-data">
-                    No emotion data available yet.
+              <div className="analysis-grid">
+                <article className="analysis-card">
+                  <div className="section-heading compact-heading">
+                    <div>
+                      <h2>Classroom Mood</h2>
+                      <p>Emotion distribution</p>
+                    </div>
+                    <span className="panel-index">A</span>
                   </div>
-                ) : (
-                  <div className="distribution-list">
-                    {emotionEntries.map(
-                      ([emotion, percentage]) => (
+
+                  {emotionEntries.length === 0 ? (
+                    <div className="no-data">
+                      No emotion data available yet.
+                    </div>
+                  ) : (
+                    <div className="distribution-list">
+                      {emotionEntries.map(([emotion, percentage]) => (
                         <div
                           className="distribution-item"
                           key={emotion}
                         >
                           <div className="distribution-top">
-                            <span>
+                            <span className="distribution-name">
                               <span className="distribution-icon">
-                                {EMOTION_EMOJIS[
-                                  emotion
-                                ] || "•"}
+                                {EMOTION_EMOJIS[emotion] || "•"}
                               </span>
-
                               {emotion}
                             </span>
 
-                            <strong>
-                              {percentage}%
-                            </strong>
+                            <strong>{percentage}%</strong>
                           </div>
 
                           <div className="progress-track">
@@ -440,54 +435,46 @@ function Analytics() {
                               style={{
                                 width: `${Math.min(
                                   100,
-                                  Math.max(
-                                    0,
-                                    Number(
-                                      percentage
-                                    ) || 0
-                                  )
+                                  Math.max(0, Number(percentage) || 0)
                                 )}%`,
                               }}
                             ></div>
                           </div>
                         </div>
-                      )
-                    )}
+                      ))}
+                    </div>
+                  )}
+                </article>
+
+                <article className="analysis-card">
+                  <div className="section-heading compact-heading">
+                    <div>
+                      <h2>Eye State Analysis</h2>
+                      <p>Attention distribution</p>
+                    </div>
+                    <span className="panel-index">B</span>
                   </div>
-                )}
-              </div>
 
-              {/* EYE / ATTENTION */}
-              <div className="analysis-card">
-                <small>ATTENTION DISTRIBUTION</small>
-
-                <h2>Eye State Analysis</h2>
-
-                {attentionEntries.length === 0 ? (
-                  <div className="no-data">
-                    No attention data available yet.
-                  </div>
-                ) : (
-                  <div className="distribution-list">
-                    {attentionEntries.map(
-                      ([state, percentage]) => (
+                  {attentionEntries.length === 0 ? (
+                    <div className="no-data">
+                      No attention data available yet.
+                    </div>
+                  ) : (
+                    <div className="distribution-list">
+                      {attentionEntries.map(([state, percentage]) => (
                         <div
                           className="distribution-item"
                           key={state}
                         >
                           <div className="distribution-top">
-                            <span>
+                            <span className="distribution-name">
                               <span className="distribution-icon">
-                                {EYE_EMOJIS[state] ||
-                                  "•"}
+                                {EYE_EMOJIS[state] || "•"}
                               </span>
-
                               {state}
                             </span>
 
-                            <strong>
-                              {percentage}%
-                            </strong>
+                            <strong>{percentage}%</strong>
                           </div>
 
                           <div className="progress-track">
@@ -496,30 +483,31 @@ function Analytics() {
                               style={{
                                 width: `${Math.min(
                                   100,
-                                  Math.max(
-                                    0,
-                                    Number(
-                                      percentage
-                                    ) || 0
-                                  )
+                                  Math.max(0, Number(percentage) || 0)
                                 )}%`,
                               }}
                             ></div>
                           </div>
                         </div>
-                      )
-                    )}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </article>
               </div>
             </section>
 
-            {/* AI INSIGHTS */}
-            <section className="analysis-card insights-card">
-              <div>
-                <small>CLASS INSIGHTS</small>
+            <section className="insights-card">
+              <div className="insights-heading">
+                <div>
+                  <div className="section-label">
+                    <span>04</span> AI ANALYSIS
+                  </div>
 
-                <h2>AI Observations</h2>
+                  <h2>AI Observations</h2>
+                  <p>Insights generated from classroom data</p>
+                </div>
+
+                <div className="insights-ai-mark">AI</div>
               </div>
 
               <div className="insights-list">
@@ -533,7 +521,9 @@ function Analytics() {
                       className={`insight ${insight.type}`}
                       key={index}
                     >
-                      <span>{insight.icon}</span>
+                      <span className="insight-icon">
+                        {insight.icon}
+                      </span>
 
                       <p>{insight.text}</p>
                     </div>
@@ -542,40 +532,49 @@ function Analytics() {
               </div>
             </section>
 
-            {/* SESSION INFORMATION */}
-            <section className="session-info">
-              <div>
-                <small>SESSION STATUS</small>
-
-                <strong>
-                  {analytics.session_active
-                    ? "Active"
-                    : "Inactive"}
-                </strong>
+            <section className="session-section">
+              <div className="section-label">
+                <span>05</span> SESSION DETAILS
               </div>
 
-              <div>
-                <small>TOTAL OBSERVATIONS</small>
+              <div className="session-info">
+                <div>
+                  <small>SESSION STATUS</small>
+                  <strong className="session-status-value">
+                    <span
+                      className={
+                        analytics.session_active
+                          ? "session-dot active"
+                          : "session-dot"
+                      }
+                    ></span>
+                    {analytics.session_active ? "Active" : "Inactive"}
+                  </strong>
+                </div>
 
-                <strong>
-                  {analytics.engagement_trend?.length ||
-                    0}
-                </strong>
-              </div>
+                <div>
+                  <small>TOTAL OBSERVATIONS</small>
+                  <strong>
+                    {analytics.engagement_trend?.length || 0}
+                  </strong>
+                </div>
 
-              <div>
-                <small>PEAK STUDENTS</small>
-
-                <strong>
-                  {analytics.peak_students ?? 0}
-                </strong>
+                <div>
+                  <small>PEAK STUDENTS</small>
+                  <strong>{analytics.peak_students ?? 0}</strong>
+                </div>
               </div>
             </section>
           </>
         )}
 
-        {/* SAVED REPORTS (one per finished live session) */}
-        <SessionReports backendUrl={BACKEND_URL} />
+        <section className="reports-section">
+          <div className="section-label">
+            <span>06</span> SAVED CLASSROOM DATA
+          </div>
+
+          <SessionReports backendUrl={BACKEND_URL} />
+        </section>
       </main>
     </div>
   );

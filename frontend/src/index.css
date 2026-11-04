@@ -1,60 +1,85 @@
+
+/* =========================
+   LIGHT THEME
+========================= */
 :root {
-  /* Light Theme Tokens */
-  --bg-primary: #f7f9fc;
+  color-scheme: light;
+
+  --bg-primary: #f5f6f8;
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
-  --bg-hover: #f1f5f9;
-  --bg-hero-gradient: linear-gradient(135deg, #f7faff, #eef4ff);
-  --bg-status: #e8f0ff;
-  --text-primary: #172033;
-  --text-secondary: #596579;
-  --text-muted: #7b8495;
-  --border-color: #e5eaf2;
-  --border-light: #d5dce8;
-  --border-divider: #edf0f5;
-  --accent-color: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-light: #e8f0ff;
-  --shadow-color: rgba(31, 53, 92, 0.12);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.04);
+  --bg-hover: #eef0f3;
+
+  --text-primary: #171717;
+  --text-secondary: #525252;
+  --text-muted: #737373;
+
+  --border-color: #e5e5e5;
+  --border-light: #d4d4d4;
+  --border-divider: #eeeeee;
+
+  --accent-color: #65a30d;
+  --accent-hover: #4d7c0f;
+  --accent-light: #ecfccb;
+
   --input-bg: #ffffff;
-  --input-border: #d5dce8;
-  --footer-bg: #101828;
-  --footer-text: #98a2b3;
-  --stat-icon-bg: #f1f5f9;
-  --progress-track: #e9edf4;
+  --input-border: #d4d4d4;
+
+  --footer-bg: #171717;
+  --footer-text: #a3a3a3;
+
+  --stat-icon-bg: #f5f5f5;
+  --progress-track: #e5e5e5;
+
+  --shadow-color: rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
 
+/* =========================
+   PURE BLACK DARK THEME
+========================= */
 [data-theme="dark"] {
-  /* Dark Theme Tokens */
-  --bg-primary: #0b0f19;
-  --bg-secondary: #151e32;
-  --bg-card: #151e32;
-  --bg-hover: #1c2842;
-  --bg-hero-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 50%, #151e32 100%);
-  --bg-status: rgba(59, 130, 246, 0.2);
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --border-color: #23324d;
-  --border-light: #2d3f61;
-  --border-divider: #1e293b;
-  --accent-color: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-light: rgba(59, 130, 246, 0.2);
+  color-scheme: dark;
+
+  --bg-primary: #050505;
+  --bg-secondary: #0d0d0d;
+  --bg-card: #111111;
+  --bg-hover: #1a1a1a;
+
+  --text-primary: #f5f5f5;
+  --text-secondary: #b3b3b3;
+  --text-muted: #858585;
+
+  --border-color: #262626;
+  --border-light: #333333;
+  --border-divider: #202020;
+
+  --accent-color: #a3e635;
+  --accent-hover: #bef264;
+  --accent-light: #263514;
+
+  --input-bg: #111111;
+  --input-border: #333333;
+
+  --footer-bg: #000000;
+  --footer-text: #888888;
+
+  --stat-icon-bg: #1a1a1a;
+  --progress-track: #292929;
+
   --shadow-color: rgba(0, 0, 0, 0.5);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --input-bg: #0f172a;
-  --input-border: #334155;
-  --footer-bg: #070a12;
-  --footer-text: #64748b;
-  --stat-icon-bg: #1e293b;
-  --progress-track: #1e293b;
+  --shadow-sm: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* =========================
+   GLOBAL STYLES
+========================= */
+* {
+  box-sizing: border-box;
 }
 
 html {
   scroll-behavior: smooth;
-  color-scheme: light dark;
 }
 
 body {
@@ -62,10 +87,20 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: Inter, Arial, sans-serif;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
 }
 
-/* Global Transition for smooth theme switching */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Smooth theme transition */
+body,
 .app,
 .navbar,
 .hero,
@@ -82,7 +117,6 @@ body {
 .classroom-stat,
 .analytics-page,
 .analytics-nav,
-.analytics-cards > div,
 .chart-card,
 .analysis-card,
 .login-page,
@@ -90,5 +124,132 @@ body {
 .register-page,
 .register-card,
 footer {
-  transition: background-color 0.3s ease, background 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+/* =================================
+   HOME PAGE - LIGHT MODE FIXES
+================================= */
+
+:root:not([data-theme="dark"]) .home-page {
+  --home-bg: #f5f6f8;
+  --home-surface: #ffffff;
+  --home-card: #ffffff;
+  --home-border: #e2e5e9;
+  --home-text: #171717;
+  --home-muted: #626b75;
+  --home-accent: #65a30d;
+}
+
+/* Navbar */
+:root:not([data-theme="dark"]) .home-navbar {
+  border-color: #e0e0e0;
+}
+
+:root:not([data-theme="dark"]) .home-brand {
+  color: #171717;
+}
+
+:root:not([data-theme="dark"]) .home-nav-links a {
+  color: #626b75;
+}
+
+:root:not([data-theme="dark"]) .home-nav-links a:hover {
+  color: #65a30d;
+}
+
+:root:not([data-theme="dark"]) .home-login-btn {
+  background: #ffffff;
+  color: #171717;
+  border-color: #d1d5db;
+}
+
+/* Hero section */
+:root:not([data-theme="dark"]) .hero-copy h1 {
+  color: #171717;
+}
+
+:root:not([data-theme="dark"]) .hero-description {
+  color: #626b75;
+}
+
+:root:not([data-theme="dark"]) .hero-secondary-btn {
+  color: #333333;
+  border-color: #d1d5db;
+}
+
+:root:not([data-theme="dark"]) .hero-trust-row {
+  color: #626b75;
+}
+
+/* Dashboard preview remains a dark dashboard */
+:root:not([data-theme="dark"]) .preview-window {
+  background: #0c0c0e;
+  border-color: #303034;
+}
+
+:root:not([data-theme="dark"]) .preview-heading h3,
+:root:not([data-theme="dark"]) .preview-summary h4,
+:root:not([data-theme="dark"]) .metric-box strong {
+  color: #f5f5f5;
+}
+
+:root:not([data-theme="dark"]) .preview-summary p,
+:root:not([data-theme="dark"]) .preview-heading p,
+:root:not([data-theme="dark"]) .metric-box > span:nth-child(2) {
+  color: #a1a1aa;
+}
+
+/* Features */
+:root:not([data-theme="dark"]) .home-features,
+:root:not([data-theme="dark"]) .home-process {
+  background: #f5f6f8;
+  border-color: #e2e5e9;
+}
+
+:root:not([data-theme="dark"]) .home-section-heading h2,
+:root:not([data-theme="dark"]) .home-feature-card h3,
+:root:not([data-theme="dark"]) .process-step h3,
+:root:not([data-theme="dark"]) .home-about h2 {
+  color: #171717;
+}
+
+:root:not([data-theme="dark"]) .home-section-heading p,
+:root:not([data-theme="dark"]) .home-feature-card p,
+:root:not([data-theme="dark"]) .process-step p,
+:root:not([data-theme="dark"]) .home-about p {
+  color: #626b75;
+}
+
+:root:not([data-theme="dark"]) .home-feature-card {
+  background: #ffffff;
+  border-color: #e2e5e9;
+}
+
+:root:not([data-theme="dark"]) .process-step {
+  border-color: #d1d5db;
+}
+
+/* About section */
+:root:not([data-theme="dark"]) .home-about {
+  background: #ffffff;
+  border-color: #e2e5e9;
+}
+
+/* Footer */
+:root:not([data-theme="dark"]) .home-footer {
+  border-color: #e2e5e9;
+}
+
+:root:not([data-theme="dark"]) .footer-brand {
+  color: #171717;
+}
+
+:root:not([data-theme="dark"]) .home-footer p,
+:root:not([data-theme="dark"]) .footer-copyright {
+  color: #626b75;
 }
