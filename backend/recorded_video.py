@@ -1,8 +1,10 @@
 """Recorded-video analysis.
 
-Reuses the live pipeline (ai_processing.process_frame: YOLO person ->
-face -> emotion + eye state) on frames sampled from the video, and then
-turns the per-frame detections into per-student reports:
+Runs the SAME engine as the live camera (engine.py: detect() + ingest()) on
+frames sampled from the video, so a recorded lecture also gets analytics and
+the alert rules (teacher absent / low engagement / drowsy class) - measured
+on the video clock - and then turns the per-frame detections into
+per-student reports:
 
   * every face is tracked across frames, so one person = one student ID
     (before, detections from every sampled frame were simply added up, which
@@ -22,18 +24,15 @@ import threading
 import cv2
 import numpy as np
 
-from ai_processing import (
-    process_frame
-)
-from eye_tracking import (
+from alerts import get_alert_engine
+from class_id import DEFAULT_CLASS_ID, normalize_class_id
+from engine import ClassEngine
+from eye_state import (
     BLINK_MAX_DURATION,
     SLEEPING_THRESHOLD,
     BLINK_DISPLAY_DURATION,
 )
-from student_reports import (
-    StudentRegistry,
-    box_iou,
-)
+from student_reports import box_iou
 
 logger = logging.getLogger(__name__)
 
@@ -228,11 +227,12 @@ def _unique_faces(results):
     return unique
 
 
-def analyze_video_file(video_path, progress=None):
+def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
     """
     Analyse a video file and return the JSON-ready result.
 
     progress: optional callable(fraction_0_to_1, stage_text, students_found)
+    class_id: whose alert thresholds (and teacher zone) are applied.
     """
 
     cap = cv2.VideoCapture(video_path)
@@ -272,8 +272,14 @@ def analyze_video_file(video_path, progress=None):
         # TRACKING STATE
         # ====================================================
 
-        registry = StudentRegistry(present_timeout=TRACK_TIMEOUT)
-        registry.reset(0.0)
+        # Same engine as the live camera, running on the video clock.
+        engine = ClassEngine.video(
+            alert_settings=get_alert_engine(class_id).get_settings(),
+            present_timeout=TRACK_TIMEOUT,
+        )
+        engine.start_session(now=0.0)
+
+        registry = engine.registry
 
         timelines = {}
 
@@ -315,43 +321,34 @@ def analyze_video_file(video_path, progress=None):
             t = frame_index / fps
             last_time = t
 
-            results = process_frame(
-                _shrink_if_large(frame),
+            small_frame = _shrink_if_large(frame)
+
+            results, person_boxes = engine.detect(
+                small_frame,
                 face_scale_factor=FACE_SCALE_FACTOR
             )
-
-            if results is None:
-                results = []
 
             results = _unique_faces(results)
 
             processed_frames += 1
-            total_detections += len(results)
 
-            detections = []
+            # Students + analytics + alerts, with the eye state turned
+            # into Blink / Drowsy / Sleeping on the VIDEO clock.
+            results = engine.ingest(
+                results,
+                person_boxes,
+                small_frame.shape,
+                now=t,
+                face_hook=eye_hook
+            )
+
+            total_detections += len(results)
 
             for result in results:
 
                 emotion = result["emotion"]
 
                 emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
-
-                detections.append((
-                    (
-                        result["x"],
-                        result["y"],
-                        result["width"],
-                        result["height"]
-                    ),
-                    {
-                        "emotion": emotion,
-                        "confidence": result["confidence"],
-                        "eye_state": result["eye_state"],
-                        "eye_confidence": result["eye_confidence"],
-                    }
-                ))
-
-            registry.update(detections, now=t, face_hook=eye_hook)
 
             if progress is not None and processed_frames % 3 == 0:
 
@@ -364,6 +361,33 @@ def analyze_video_file(video_path, progress=None):
                         now=t, min_samples=MIN_SAMPLES
                     )["students_total"]
                 )
+
+        # ====================================================
+        # ALERTS RAISED DURING THE VIDEO (video seconds)
+        # ====================================================
+
+        engine.end_session(now=last_time)
+
+        alert_data = engine.alert_engine.get_alerts(limit=500)
+
+        alerts = [
+            {
+                "type": alert["type"],
+                "severity": alert["severity"],
+                "title": alert["title"],
+                "message": alert["message"],
+                "started_at": round(alert["started_at"], 1),
+                "resolved_at": (
+                    round(alert["resolved_at"], 1)
+                    if alert["resolved_at"] is not None else None
+                ),
+                "details": alert["details"],
+            }
+            for alert in sorted(
+                alert_data["active"] + alert_data["history"],
+                key=lambda a: a["started_at"]
+            )
+        ]
 
         # ====================================================
         # FINAL REPORT
@@ -445,6 +469,10 @@ def analyze_video_file(video_path, progress=None):
             "most_common_emotion": most_common_emotion,
 
             "notes": notes,
+            # Same alert rules as the live camera, on the video clock
+            # (times are seconds into the video).
+            "alerts": alerts,
+            "class_analytics": engine.analytics.snapshot(),
         }
 
     finally:
@@ -469,7 +497,7 @@ def _remove_file(path):
             logger.warning("Could not delete temporary video: %s", e)
 
 
-def _video_job_worker(job_id, video_path):
+def _video_job_worker(job_id, video_path, class_id=DEFAULT_CLASS_ID):
 
     def progress(fraction, stage, students_found):
 
@@ -485,7 +513,7 @@ def _video_job_worker(job_id, video_path):
 
     try:
 
-        result = analyze_video_file(video_path, progress)
+        result = analyze_video_file(video_path, progress, class_id)
 
         with video_jobs_lock:
 
@@ -526,6 +554,11 @@ def analyze_video():
     started_background_job = False
 
     try:
+
+        # Whose alert thresholds apply (form field or query string).
+        class_id = normalize_class_id(
+            request.form.get("class_id") or request.args.get("class_id")
+        )
 
         # ====================================================
         # CHECK VIDEO
@@ -614,7 +647,7 @@ def analyze_video():
 
             threading.Thread(
                 target=_video_job_worker,
-                args=(job_id, video_path),
+                args=(job_id, video_path, class_id),
                 daemon=True
             ).start()
 
@@ -630,7 +663,7 @@ def analyze_video():
         # ====================================================
 
         return jsonify(
-            analyze_video_file(video_path)
+            analyze_video_file(video_path, class_id=class_id)
         )
 
     # ========================================================

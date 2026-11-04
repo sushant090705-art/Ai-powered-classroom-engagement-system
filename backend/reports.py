@@ -1,15 +1,18 @@
-"""Saved session reports.
+"""Saved session reports (stored in SQLite, see storage.py).
 
 When a live session ends (camera stopped), save_session_report() stores a
-final per-student report as a JSON file in backend/saved_reports/.
-The routes below list, open and delete those reports. The live student
-routes (/students/...) are here too.
+final per-student report. The routes below list, open and delete the saved
+reports, compare sessions over time, and serve the live student routes
+(/students/...).
+
+Every route takes an optional ?class_id=... (point 12). Without it the
+live routes use the default class and the report list shows all classes.
 """
 
 import logging
-import json
 import os
 import re
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -17,14 +20,17 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 
 from analytics import get_session_snapshot
-from ai_processing import student_registry
+from class_id import DEFAULT_CLASS_ID, normalize_class_id
+from engine import get_class_engine
+from storage import get_storage
 
 logger = logging.getLogger(__name__)
 
 
 reports_bp = Blueprint("reports", __name__)
 
-REPORTS_DIR = os.path.join(
+# Folder of the old JSON reports; imported into the database once.
+LEGACY_REPORTS_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     "saved_reports",
 )
@@ -35,11 +41,33 @@ ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 MIN_STUDENT_SAMPLES = 3
 MIN_SAMPLE_SHARE = 0.05
 
+_legacy_lock = threading.Lock()
+_legacy_checked = False
+
+
+def _ensure_legacy_imported():
+    """Copy old saved_reports/*.json into SQLite (once per process)."""
+
+    global _legacy_checked
+
+    with _legacy_lock:
+
+        if _legacy_checked:
+            return
+
+        _legacy_checked = True
+
+        try:
+            get_storage().import_legacy_reports(LEGACY_REPORTS_DIR)
+        except Exception:
+            logger.exception("Legacy report import failed")
+
 
 def _summary(report):
 
     return {
         "id": report["id"],
+        "class_id": report.get("class_id", DEFAULT_CLASS_ID),
         "title": report["title"],
         "started_at": report["started_at"],
         "ended_at": report["ended_at"],
@@ -50,25 +78,26 @@ def _summary(report):
     }
 
 
-def _path_for(report_id):
-
-    if not ID_PATTERN.match(report_id or ""):
-        return None
-
-    return os.path.join(REPORTS_DIR, f"{report_id}.json")
-
-
-def save_session_report():
+def save_session_report(class_id=DEFAULT_CLASS_ID):
     """Build and store the report for the session that just ended.
 
     Returns the report summary, or None when there is nothing to save
     (no session, or no student was detected).
     """
 
-    snapshot = get_session_snapshot()
+    engine = get_class_engine(class_id)
+    store = get_storage()
+    session_id = engine.session_id
+
+    snapshot = get_session_snapshot(class_id)
+
+    def nothing_to_save():
+        if session_id:
+            store.discard_session(session_id)
+        return None
 
     if snapshot is None or snapshot["total_samples"] == 0:
-        return None
+        return nothing_to_save()
 
     now = time.time()
 
@@ -77,12 +106,12 @@ def save_session_report():
         int(round(MIN_SAMPLE_SHARE * snapshot["total_samples"])),
     )
 
-    class_report = student_registry.build_reports(
+    class_report = engine.registry.build_reports(
         now=now, min_samples=min_samples
     )
 
     if class_report["students_total"] == 0:
-        return None
+        return nothing_to_save()
 
     students = sorted(
         class_report["students"],
@@ -96,10 +125,11 @@ def save_session_report():
         level = student["engagement"]["level"]
         levels[level] = levels.get(level, 0) + 1
 
-    report_id = uuid.uuid4().hex
-
     report = {
-        "id": report_id,
+        # The report id IS the session id, so samples and alerts recorded
+        # during the session can be joined to it.
+        "id": session_id or uuid.uuid4().hex,
+        "class_id": class_id,
         "title": "Class session, " + datetime.fromtimestamp(
             snapshot["started_at"]
         ).strftime("%d %b %Y, %I:%M %p"),
@@ -118,17 +148,26 @@ def save_session_report():
         "students": students,
     }
 
-    os.makedirs(REPORTS_DIR, exist_ok=True)
-
-    final_path = _path_for(report_id)
-    temp_path = final_path + ".tmp"
-
-    with open(temp_path, "w", encoding="utf-8") as handle:
-        json.dump(report, handle)
-
-    os.replace(temp_path, final_path)
+    store.finish_session(report, class_id, kind="live")
 
     return _summary(report)
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def _optional_class_id():
+    """?class_id=... or None (= all classes)."""
+
+    raw = request.args.get("class_id")
+
+    return normalize_class_id(raw) if raw else None
+
+
+@reports_bp.errorhandler(ValueError)
+def _bad_class_id(error):
+    return jsonify({"success": False, "message": str(error)}), 400
 
 
 # ============================================================
@@ -138,51 +177,79 @@ def save_session_report():
 @reports_bp.route("/reports", methods=["GET"])
 def list_reports():
 
-    summaries = []
+    _ensure_legacy_imported()
 
-    if os.path.isdir(REPORTS_DIR):
+    rows = get_storage().list_sessions(class_id=_optional_class_id())
 
-        for name in os.listdir(REPORTS_DIR):
-
-            if not name.endswith(".json"):
-                continue
-
-            try:
-                with open(
-                    os.path.join(REPORTS_DIR, name), encoding="utf-8"
-                ) as handle:
-                    summaries.append(_summary(json.load(handle)))
-            except Exception as e:
-                logger.warning("Skipping unreadable report %s: %s", name, e)
-
-    summaries.sort(key=lambda r: r["ended_at"], reverse=True)
-
-    return jsonify({"success": True, "reports": summaries})
+    return jsonify({
+        "success": True,
+        "reports": [_summary(row | {"title": row["title"] or ""}) for row in rows],
+    })
 
 
 @reports_bp.route("/reports/<report_id>", methods=["GET"])
 def get_report(report_id):
 
-    path = _path_for(report_id)
+    _ensure_legacy_imported()
 
-    if path is None or not os.path.exists(path):
+    report = (
+        get_storage().get_session_report(report_id)
+        if ID_PATTERN.match(report_id) else None
+    )
+
+    if report is None:
         return jsonify({"success": False, "message": "Report not found"}), 404
 
-    with open(path, encoding="utf-8") as handle:
-        return jsonify({"success": True, "report": json.load(handle)})
+    return jsonify({"success": True, "report": report})
 
 
 @reports_bp.route("/reports/<report_id>", methods=["DELETE"])
 def delete_report(report_id):
 
-    path = _path_for(report_id)
-
-    if path is None or not os.path.exists(path):
+    if (
+        not ID_PATTERN.match(report_id)
+        or not get_storage().delete_session(report_id)
+    ):
         return jsonify({"success": False, "message": "Report not found"}), 404
 
-    os.remove(path)
-
     return jsonify({"success": True, "message": "Report deleted"})
+
+
+# ============================================================
+# HISTORY (compare sessions over time)
+# ============================================================
+
+@reports_bp.route("/history/sessions", methods=["GET"])
+def session_history():
+    """Engagement of every finished session, oldest first, so a chart can
+    show how a class develops over weeks."""
+
+    _ensure_legacy_imported()
+
+    try:
+        limit = max(1, min(int(request.args.get("limit", 30)), 200))
+    except ValueError:
+        limit = 30
+
+    return jsonify({
+        "success": True,
+        "sessions": get_storage().compare_sessions(
+            _optional_class_id(), limit
+        ),
+    })
+
+
+@reports_bp.route("/history/sessions/<session_id>/samples", methods=["GET"])
+def session_samples(session_id):
+    """The engagement time series recorded during one session."""
+
+    if not ID_PATTERN.match(session_id):
+        return jsonify({"success": False, "message": "Session not found"}), 404
+
+    return jsonify({
+        "success": True,
+        "samples": get_storage().get_samples(session_id),
+    })
 
 
 # ============================================================
@@ -192,9 +259,11 @@ def delete_report(report_id):
 @reports_bp.route("/students/report", methods=["GET"])
 def live_student_report():
 
-    return jsonify(
-        student_registry.build_reports(min_samples=MIN_STUDENT_SAMPLES)
-    )
+    registry = get_class_engine(
+        normalize_class_id(request.args.get("class_id"))
+    ).registry
+
+    return jsonify(registry.build_reports(min_samples=MIN_STUDENT_SAMPLES))
 
 
 @reports_bp.route("/students/<int:student_id>/rename", methods=["POST"])
@@ -205,7 +274,11 @@ def rename_student(student_id):
     if not name or len(name) > 60:
         return jsonify({"success": False, "message": "Invalid name"}), 400
 
-    if not student_registry.rename(student_id, name):
+    registry = get_class_engine(
+        normalize_class_id(request.args.get("class_id"))
+    ).registry
+
+    if not registry.rename(student_id, name):
         return jsonify({"success": False, "message": "Student not found"}), 404
 
     return jsonify({"success": True})

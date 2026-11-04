@@ -1,43 +1,27 @@
 """
 Real classroom analytics.
 
-This module collects the actual AI results produced by ai_processing.py
+This module collects the actual AI results produced by the AI pipeline
 and provides session analytics for the Analytics page.
+
+Each class / camera has its own AnalyticsSession (point 12). The module
+level functions and routes still work without a class id: they use the
+default class.
 """
 
-from flask import Blueprint, jsonify
-from threading import Lock
-from collections import Counter
 import time
+from collections import Counter
+from threading import Lock, RLock
+
+from flask import Blueprint, jsonify, request
+
+from class_id import DEFAULT_CLASS_ID, normalize_class_id
 
 
 analytics_bp = Blueprint(
     "analytics",
     __name__
 )
-
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-
-analytics_lock = Lock()
-
-session_started_at = None
-
-total_samples = 0
-peak_students = 0
-current_students = 0      # faces seen in the most recent AI cycle
-
-engagement_values = []
-attention_values = []
-
-emotion_counter = Counter()
-eye_counter = Counter()
-
-trend_data = []
-
-last_trend_time = 0
 
 
 # ============================================================
@@ -161,404 +145,246 @@ def annotate_engagement(faces):
 
 
 # ============================================================
-# START SESSION
+# ONE ANALYTICS SESSION (per class)
 # ============================================================
 
-def start_analytics_session():
-    global session_started_at
-    global total_samples
-    global peak_students
-    global current_students
-    global last_trend_time
-
-    with analytics_lock:
-
-        session_started_at = time.time()
-
-        total_samples = 0
-        peak_students = 0
-        current_students = 0
-
-        engagement_values.clear()
-        attention_values.clear()
-
-        emotion_counter.clear()
-        eye_counter.clear()
-
-        trend_data.clear()
-
-        last_trend_time = 0
+TREND_INTERVAL_SECONDS = 5
 
 
-# ============================================================
-# RECORD AI RESULTS
-# ============================================================
+class AnalyticsSession:
+    """Running statistics of one class session.
 
-def record_ai_results(results):
-    """
-    Called after every AI processing cycle.
-
-    `results` contains actual emotion and eye predictions.
+    wall_clock=True  : `now` values are time.time() (live camera).
+    wall_clock=False : `now` is a position in a recorded video (seconds);
+                       trend labels are then mm:ss of the video.
     """
 
-    global total_samples
-    global peak_students
-    global current_students
-    global last_trend_time
+    def __init__(self, class_id=DEFAULT_CLASS_ID, wall_clock=True):
 
-    if not results:
-        # Nobody visible this cycle: the live count must drop to 0,
-        # but averages are left untouched.
-        with analytics_lock:
-            current_students = 0
-        return
+        self.class_id = class_id
+        self.wall_clock = wall_clock
+        self.lock = Lock()
+        self.session_started_at = None
+        self._clear()
 
-    now = time.time()
+    def _clear(self):
 
-    with analytics_lock:
+        self.total_samples = 0
+        self.peak_students = 0
+        self.current_students = 0     # faces in the most recent AI cycle
+        self.engagement_values = []
+        self.attention_values = []
+        self.emotion_counter = Counter()
+        self.eye_counter = Counter()
+        self.trend_data = []
+        self.last_trend_time = None
 
-        if session_started_at is None:
+    # --------------------------------------------------------
+
+    def start(self, now=None):
+
+        with self.lock:
+            self.session_started_at = time.time() if now is None else now
+            self._clear()
+
+    def _label(self, now):
+
+        if self.wall_clock:
+            return time.strftime("%H:%M:%S", time.localtime(now))
+
+        return f"{int(now // 60):02d}:{int(now % 60):02d}"
+
+    def record(self, results, now=None):
+        """Add one AI cycle. Called after every processing cycle."""
+
+        if not results:
+            # Nobody visible: the live count drops to 0, averages stay.
+            with self.lock:
+                self.current_students = 0
             return
 
-        total_samples += 1
+        now = time.time() if now is None else now
 
-        # ----------------------------------------------------
-        # CURRENT DETECTED PEOPLE
-        # ----------------------------------------------------
+        with self.lock:
 
-        current_students = len(results)
+            if self.session_started_at is None:
+                return
 
-        peak_students = max(
-            peak_students,
-            len(results)
-        )
+            self.total_samples += 1
+            self.current_students = len(results)
+            self.peak_students = max(self.peak_students, len(results))
 
-        # ----------------------------------------------------
-        # PROCESS EACH DETECTED PERSON
-        # ----------------------------------------------------
+            sample_engagement = []
+            sample_attention = []
 
-        sample_engagement = []
-        sample_attention = []
+            for result in results:
 
-        for result in results:
+                self.emotion_counter[result.get("emotion", "Neutral")] += 1
+                self.eye_counter[result.get("eye_state", "Unknown")] += 1
 
-            emotion = result.get(
-                "emotion",
-                "Neutral"
+                sample_engagement.append(calculate_engagement_score(result))
+                sample_attention.append(calculate_attention_score(result))
+
+            mean_engagement = sum(sample_engagement) / len(sample_engagement)
+            mean_attention = sum(sample_attention) / len(sample_attention)
+
+            self.engagement_values.append(mean_engagement)
+            self.attention_values.append(mean_attention)
+
+            # One trend point about every TREND_INTERVAL_SECONDS.
+            if (
+                self.last_trend_time is None
+                or now - self.last_trend_time >= TREND_INTERVAL_SECONDS
+            ):
+                self.trend_data.append({
+                    "time": self._label(now),
+                    "value": round(mean_engagement),
+                })
+                self.last_trend_time = now
+
+    # --------------------------------------------------------
+
+    @staticmethod
+    def _percentages(counter):
+
+        total = sum(counter.values())
+
+        if not total:
+            return {}
+
+        return {k: round(v / total * 100) for k, v in counter.items()}
+
+    @staticmethod
+    def _average(values):
+        return round(sum(values) / len(values)) if values else 0
+
+    def snapshot(self):
+        """Plain-dict summary of the session, or None if none started."""
+
+        with self.lock:
+
+            if self.session_started_at is None:
+                return None
+
+            return {
+                "started_at": self.session_started_at,
+                "total_samples": self.total_samples,
+                "peak_students": self.peak_students,
+                "overall_engagement": self._average(self.engagement_values),
+                "attention": self._average(self.attention_values),
+                "emotion_distribution": self._percentages(self.emotion_counter),
+                "attention_distribution": self._percentages(self.eye_counter),
+                "engagement_trend": list(self.trend_data),
+            }
+
+    def payload(self):
+        """The JSON shown on the Analytics page."""
+
+        with self.lock:
+
+            if self.session_started_at is None:
+                return {
+                    "success": True,
+                    "session_active": False,
+                    "overall_engagement": 0,
+                    "attention": 0,
+                    "active_students": 0,
+                    "peak_students": 0,
+                    "duration_seconds": 0,
+                    "duration": "00:00",
+                    "emotion_distribution": {},
+                    "attention_distribution": {},
+                    "engagement_trend": [],
+                }
+
+            duration_seconds = int(
+                (time.time() if self.wall_clock else self.last_trend_time or 0)
+                - self.session_started_at
             )
 
-            eye_state = result.get(
-                "eye_state",
-                "Unknown"
-            )
-
-            emotion_counter[emotion] += 1
-
-            eye_counter[eye_state] += 1
-
-            engagement = calculate_engagement_score(
-                result
-            )
-
-            attention = calculate_attention_score(
-                result
-            )
-
-            sample_engagement.append(
-                engagement
-            )
-
-            sample_attention.append(
-                attention
-            )
-
-        # ----------------------------------------------------
-        # SESSION AVERAGES
-        # ----------------------------------------------------
-
-        if sample_engagement:
-
-            engagement_values.append(
-                sum(sample_engagement)
-                /
-                len(sample_engagement)
-            )
-
-        if sample_attention:
-
-            attention_values.append(
-                sum(sample_attention)
-                /
-                len(sample_attention)
-            )
-
-        # ----------------------------------------------------
-        # TREND
-        # ----------------------------------------------------
-
-        # Create one trend point approximately every 5 seconds.
-
-        if (
-            last_trend_time == 0
-            or
-            now - last_trend_time >= 5
-        ):
-
-            current_engagement = (
-                sum(sample_engagement)
-                /
-                len(sample_engagement)
-            )
-
-            trend_data.append({
-
-                "time": time.strftime(
-                    "%H:%M:%S",
-                    time.localtime(now)
+            return {
+                "success": True,
+                "session_active": True,
+                "overall_engagement": self._average(self.engagement_values),
+                "attention": self._average(self.attention_values),
+                "active_students": self.current_students,
+                "peak_students": self.peak_students,
+                "duration_seconds": duration_seconds,
+                "duration": (
+                    f"{duration_seconds // 60:02d}:"
+                    f"{duration_seconds % 60:02d}"
                 ),
-
-                "value": round(
-                    current_engagement
-                )
-
-            })
-
-            last_trend_time = now
+                "emotion_distribution": self._percentages(self.emotion_counter),
+                "attention_distribution": self._percentages(self.eye_counter),
+                "engagement_trend": self.trend_data[-60:],
+            }
 
 
 # ============================================================
-# GET ANALYTICS
+# SESSIONS PER CLASS
 # ============================================================
 
-@analytics_bp.route(
-    "/analytics",
-    methods=["GET"]
-)
+_sessions = {}
+_sessions_lock = RLock()
+
+
+def get_analytics_session(class_id=DEFAULT_CLASS_ID):
+    """The AnalyticsSession of a class (created on first use)."""
+
+    with _sessions_lock:
+
+        session = _sessions.get(class_id)
+
+        if session is None:
+            session = _sessions[class_id] = AnalyticsSession(class_id)
+
+        return session
+
+
+# Module-level helpers kept for existing callers (default class).
+
+def start_analytics_session(class_id=DEFAULT_CLASS_ID):
+    get_analytics_session(class_id).start()
+
+
+def record_ai_results(results, class_id=DEFAULT_CLASS_ID, now=None):
+    get_analytics_session(class_id).record(results, now)
+
+
+def get_session_snapshot(class_id=DEFAULT_CLASS_ID):
+    return get_analytics_session(class_id).snapshot()
+
+
+# ============================================================
+# ROUTES
+# ============================================================
+
+def _requested_class_id():
+    return normalize_class_id(request.args.get("class_id"))
+
+
+@analytics_bp.route("/analytics", methods=["GET"])
 def get_analytics():
 
-    with analytics_lock:
+    try:
+        class_id = _requested_class_id()
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
 
-        if session_started_at is None:
-
-            return jsonify({
-
-                "success": True,
-
-                "session_active": False,
-
-                "overall_engagement": 0,
-
-                "attention": 0,
-
-                "active_students": 0,
-
-                "peak_students": 0,
-
-                "duration_seconds": 0,
-
-                "duration": "00:00",
-
-                "emotion_distribution": {},
-
-                "attention_distribution": {},
-
-                "engagement_trend": []
-
-            })
-
-        # ----------------------------------------------------
-        # OVERALL ENGAGEMENT
-        # ----------------------------------------------------
-
-        if engagement_values:
-
-            overall_engagement = round(
-                sum(engagement_values)
-                /
-                len(engagement_values)
-            )
-
-        else:
-
-            overall_engagement = 0
-
-        # ----------------------------------------------------
-        # ATTENTION
-        # ----------------------------------------------------
-
-        if attention_values:
-
-            attention = round(
-                sum(attention_values)
-                /
-                len(attention_values)
-            )
-
-        else:
-
-            attention = 0
-
-        # ----------------------------------------------------
-        # CURRENT ACTIVE STUDENTS
-        # ----------------------------------------------------
-
-        # Real count from the latest AI cycle (0 when nobody is visible).
-        active_students = current_students
-
-        # ----------------------------------------------------
-        # DURATION
-        # ----------------------------------------------------
-
-        duration_seconds = int(
-            time.time()
-            -
-            session_started_at
-        )
-
-        minutes = duration_seconds // 60
-        seconds = duration_seconds % 60
-
-        duration = (
-            f"{minutes:02d}:{seconds:02d}"
-        )
-
-        # ----------------------------------------------------
-        # EMOTION DISTRIBUTION
-        # ----------------------------------------------------
-
-        total_emotions = sum(
-            emotion_counter.values()
-        )
-
-        emotion_distribution = {}
-
-        if total_emotions:
-
-            for emotion, count in emotion_counter.items():
-
-                emotion_distribution[
-                    emotion
-                ] = round(
-                    count
-                    /
-                    total_emotions
-                    *
-                    100
-                )
-
-        # ----------------------------------------------------
-        # ATTENTION DISTRIBUTION
-        # ----------------------------------------------------
-
-        total_eyes = sum(
-            eye_counter.values()
-        )
-
-        attention_distribution = {}
-
-        if total_eyes:
-
-            for state, count in eye_counter.items():
-
-                attention_distribution[
-                    state
-                ] = round(
-                    count
-                    /
-                    total_eyes
-                    *
-                    100
-                )
-
-        return jsonify({
-
-            "success": True,
-
-            "session_active": True,
-
-            "overall_engagement":
-                overall_engagement,
-
-            "attention":
-                attention,
-
-            "active_students":
-                active_students,
-
-            "peak_students":
-                peak_students,
-
-            "duration_seconds":
-                duration_seconds,
-
-            "duration":
-                duration,
-
-            "emotion_distribution":
-                emotion_distribution,
-
-            "attention_distribution":
-                attention_distribution,
-
-            "engagement_trend":
-                trend_data[-60:]
-
-        })
+    return jsonify(get_analytics_session(class_id).payload())
 
 
-# ============================================================
-# RESET SESSION
-# ============================================================
-
-@analytics_bp.route(
-    "/analytics/reset",
-    methods=["POST"]
-)
+@analytics_bp.route("/analytics/reset", methods=["POST"])
 def reset_analytics():
 
-    start_analytics_session()
+    try:
+        class_id = _requested_class_id()
+    except ValueError as error:
+        return jsonify({"success": False, "message": str(error)}), 400
+
+    start_analytics_session(class_id)
 
     return jsonify({
-
         "success": True,
-
-        "message":
-            "Analytics session reset successfully."
-
+        "message": "Analytics session reset successfully.",
     })
-
-
-# ============================================================
-# SNAPSHOT (used when a session report is saved)
-# ============================================================
-
-def get_session_snapshot():
-    """Plain-dict summary of the current session, or None if none started."""
-
-    with analytics_lock:
-
-        if session_started_at is None:
-            return None
-
-        def percentages(counter):
-            total = sum(counter.values())
-            if not total:
-                return {}
-            return {k: round(v / total * 100) for k, v in counter.items()}
-
-        return {
-            "started_at": session_started_at,
-            "total_samples": total_samples,
-            "peak_students": peak_students,
-            "overall_engagement": (
-                round(sum(engagement_values) / len(engagement_values))
-                if engagement_values else 0
-            ),
-            "attention": (
-                round(sum(attention_values) / len(attention_values))
-                if attention_values else 0
-            ),
-            "emotion_distribution": percentages(emotion_counter),
-            "attention_distribution": percentages(eye_counter),
-            "engagement_trend": list(trend_data),
-        }

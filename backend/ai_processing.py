@@ -1,14 +1,17 @@
-"""Live AI frame processing and background processing loop.
+"""AI detection pipeline for a single frame.
 
-The Flask routes live in camera.py. This module contains only the AI/state
-logic used by those routes.
+process_frame() is the only place where the YOLO / emotion / eye models are
+run. It is used by the shared engine (engine.py), which feeds live-camera
+frames AND recorded-video frames through the same code.
+
+The functions below process_frame() are thin wrappers kept for older
+callers; they forward to the ClassEngine of the requested class.
 """
 
 import logging
+
 import cv2
 import numpy as np
-import threading
-import time
 
 from model_loader import (
     yolo_model,
@@ -17,87 +20,59 @@ from model_loader import (
     face_detector,
     eye_detector,
 )
-
-from eye_tracking import (
-    get_eye_track_id,
-    predict_eye_state,
-    update_eye_display_state,
-)
-from analytics import (
-    start_analytics_session,
-    record_ai_results
-)
-from student_reports import StudentRegistry
-from alerts import (
-    start_alert_session,
-    end_alert_session,
-    evaluate_alerts,
-)
+from eye_state import EyeTracker
+from eye_tracking import predict_eye_state
+from class_id import DEFAULT_CLASS_ID
+from engine import AI_INTERVAL, get_class_engine  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
+# Used only when process_frame() is called without a tracker.
+_fallback_tracker = EyeTracker()
 
 
-AI_INTERVAL = 0.5
+# ------------------------------------------------------------
+# wrappers around the per-class engine
+# ------------------------------------------------------------
 
-latest_frame = None
-latest_results = []
-frame_lock = threading.Lock()
-results_lock = threading.Lock()
-
-# Person boxes from the latest processed frame, consumed by student reports.
-last_person_boxes = []
-
-ai_thread = None
-ai_running = False
-
-# One record per tracked student for the current live session.
-student_registry = StudentRegistry()
+def set_latest_frame(frame, class_id=DEFAULT_CLASS_ID):
+    get_class_engine(class_id).set_latest_frame(frame)
 
 
-def update_student_registry(person_boxes, results):
-    """Feed this cycle's detections into the per-student registry."""
-
-    detections = [
-        (
-            (r["x"], r["y"], r["width"], r["height"]),
-            {
-                "emotion": r["emotion"],
-                "confidence": r["confidence"],
-                "eye_state": r["eye_state"],
-                "eye_confidence": r["eye_confidence"],
-            },
-        )
-        for r in results
-    ]
-
-    student_registry.update(detections)
+def get_latest_results(class_id=DEFAULT_CLASS_ID):
+    return get_class_engine(class_id).get_latest_results()
 
 
-def set_latest_frame(frame):
-    global latest_frame
-
-    with frame_lock:
-        latest_frame = None if frame is None else frame.copy()
+def clear_latest_results(class_id=DEFAULT_CLASS_ID):
+    get_class_engine(class_id).clear_latest_results()
 
 
-def get_latest_results():
-    with results_lock:
-        return list(latest_results)
+def start_ai_thread(class_id=DEFAULT_CLASS_ID):
+    return get_class_engine(class_id).start()
 
 
-def clear_latest_results():
-    global latest_results
-
-    with results_lock:
-        latest_results = []
+def stop_ai_thread(class_id=DEFAULT_CLASS_ID):
+    get_class_engine(class_id).stop()
 
 
-def process_frame(frame, face_scale_factor=1.3):
+def process_frame(
+    frame, face_scale_factor=1.3, tracker=None, person_boxes=None
+):
+    """Detect people, faces, emotions and eye states in ONE frame.
 
-    global last_person_boxes
+    tracker       the EyeTracker of this camera / class (a shared fallback
+                  is used when omitted).
+    person_boxes  optional list that is filled with the YOLO person boxes
+                  (x1, y1, x2, y2) - used by the teacher-presence alert.
 
-    last_person_boxes = []
+    Returns one result dict per face. The frame is annotated in place.
+    """
+
+    if tracker is None:
+        tracker = _fallback_tracker
+
+    if person_boxes is None:
+        person_boxes = []
 
     results = []
 
@@ -148,7 +123,7 @@ def process_frame(frame, face_scale_factor=1.3):
                 continue
 
             # Remember this person for the student reports
-            last_person_boxes.append((x1, y1, x2, y2))
+            person_boxes.append((x1, y1, x2, y2))
 
             # =================================================
             # 3. FACE DETECTION
@@ -436,7 +411,7 @@ def process_frame(frame, face_scale_factor=1.3):
                     # 9. TRACK THIS FACE
                     # =================================================
 
-                    track_id = get_eye_track_id(
+                    track_id = tracker.get_track_id(
                         face_center_x,
                         face_center_y
                     )
@@ -446,7 +421,7 @@ def process_frame(frame, face_scale_factor=1.3):
                     # =================================================
 
                     eye_state = (
-                        update_eye_display_state(
+                        tracker.update_display_state(
                             track_id,
                             raw_eye_state
                         )
@@ -637,111 +612,3 @@ def process_frame(frame, face_scale_factor=1.3):
         logger.exception("Process frame error")
 
     return results
-
-def ai_processing_loop():
-
-    global ai_running
-    global latest_results
-
-    logger.info("AI processing thread started.")
-
-    last_process_time = 0
-
-    while ai_running:
-
-        current_time = time.time()
-
-        if (
-            current_time
-            -
-            last_process_time
-            <
-            AI_INTERVAL
-        ):
-
-            time.sleep(0.01)
-
-            continue
-
-        with frame_lock:
-
-            if latest_frame is None:
-
-                frame_copy = None
-
-            else:
-
-                frame_copy = latest_frame.copy()
-
-        if frame_copy is None:
-
-            time.sleep(0.05)
-
-            continue
-
-        last_process_time = current_time
-
-        results = process_frame(
-            frame_copy
-        )
-        
-        record_ai_results(results)
-
-        # Module 5: check alert rules every cycle, even when no face was
-        # found (an empty classroom / absent teacher must still be seen).
-        try:
-
-            evaluate_alerts(
-                list(last_person_boxes),
-                results,
-                frame_copy.shape
-            )
-
-        except Exception as alert_error:
-
-            logger.exception("Alert evaluation error")
-
-        with results_lock:
-
-            latest_results = results
-
-        try:
-
-            update_student_registry(
-                list(last_person_boxes),
-                results
-            )
-
-        except Exception as report_error:
-
-            logger.exception("Student report update error")
-
-    logger.info("AI processing thread stopped.")
-
-def start_ai_thread():
-
-    global ai_thread
-    global ai_running
-
-    if ai_running:
-        return
-
-    start_analytics_session()
-    start_alert_session()
-    student_registry.reset()
-
-    ai_running = True
-
-    ai_thread = threading.Thread(
-        target=ai_processing_loop,
-        daemon=True
-    )
-
-    ai_thread.start()
-
-def stop_ai_thread():
-
-    global ai_running
-
-    ai_running = False
-    end_alert_session()

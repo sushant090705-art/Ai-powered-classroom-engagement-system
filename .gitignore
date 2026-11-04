@@ -27,3 +27,6 @@ backend/saved_reports/
 # Backend logs
 backend/logs/
 *.log
+# SQLite database (sessions, students, samples, alerts)
+backend/data/
+.pytest_cache/

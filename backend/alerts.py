@@ -31,7 +31,11 @@ Design notes
 * YOLO only knows "person", not "teacher". Teacher presence is therefore
   decided by a configurable teacher ZONE (a rectangle in the camera view):
   a person whose box centre is inside the zone counts as the teacher.
-* Alerts and settings are stored as JSON files in backend/saved_alerts/.
+* Settings are JSON files in backend/saved_alerts/ (one folder per class,
+  the default class uses the folder itself). The alert HISTORY is stored in
+  the SQLite database (storage.py); without a database the engine falls back
+  to alerts.json, and with data_dir=None it keeps everything in memory
+  (recorded-video analysis).
 """
 
 import logging
@@ -50,6 +54,8 @@ from email.message import EmailMessage
 from flask import Blueprint, jsonify, request
 
 from analytics import calculate_engagement_score
+from class_id import DEFAULT_CLASS_ID, normalize_class_id
+from storage import get_storage
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +68,9 @@ alerts_bp = Blueprint("alerts", __name__)
 # ============================================================
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "saved_alerts")
+DATA_DIR = os.environ.get("ALERTS_DATA_DIR") or os.path.join(
+    BASE_DIR, "saved_alerts"
+)
 
 MAX_HISTORY = 500
 CLEAR_SECONDS = 20          # how long a condition must be good to clear
@@ -477,27 +485,51 @@ ALERT_TYPES = ("TEACHER_ABSENT", "LOW_ENGAGEMENT", "CLASS_DROWSY")
 
 class AlertEngine:
 
-    def __init__(self, data_dir=DATA_DIR, notifier=None):
+    def __init__(
+        self,
+        data_dir=DATA_DIR,
+        notifier=None,
+        store=None,
+        class_id=DEFAULT_CLASS_ID,
+        settings=None,
+    ):
+        """
+        data_dir  folder for settings.json (and alerts.json when there is no
+                  store). None = keep everything in memory.
+        store     a storage.Storage: alert history goes to SQLite.
+        class_id  the class / room this engine watches.
+        settings  optional settings patch (used when data_dir is None).
+        """
 
         self.data_dir = data_dir
-        self.settings_path = os.path.join(data_dir, "settings.json")
-        self.history_path = os.path.join(data_dir, "alerts.json")
+        self.store = store
+        self.class_id = class_id
+        self.settings_path = (
+            os.path.join(data_dir, "settings.json") if data_dir else None
+        )
+        self.history_path = (
+            os.path.join(data_dir, "alerts.json") if data_dir else None
+        )
 
         self.lock = threading.RLock()
         self.notifier = notifier or self._default_notifier
 
-        self.settings = self._load_settings()
+        self.settings = self._load_settings(settings)
         self.history = self._load_history()     # oldest first
         self.active = {}                        # alert type -> alert dict
 
         self.session_active = False
+        self.session_id = None
         self._reset_runtime()
 
     # --------------------------------------------------------
     # persistence
     # --------------------------------------------------------
 
-    def _load_settings(self):
+    def _load_settings(self, patch=None):
+
+        if self.settings_path is None:
+            return validate_settings(patch or {}, DEFAULT_SETTINGS)
 
         stored = _read_json(self.settings_path, {})
 
@@ -508,7 +540,13 @@ class AlertEngine:
 
     def _load_history(self):
 
-        stored = _read_json(self.history_path, {}).get("alerts", [])
+        if self.store is not None:
+            self._import_legacy_history()
+            stored = self.store.load_alerts(self.class_id, MAX_HISTORY)
+        elif self.history_path is not None:
+            stored = _read_json(self.history_path, {}).get("alerts", [])
+        else:
+            stored = []
 
         history = []
 
@@ -523,18 +561,49 @@ class AlertEngine:
                 alert["status"] = "resolved"
                 alert["resolved_at"] = alert.get("resolved_at") or time.time()
                 alert["resolved_reason"] = "server_restart"
+                self._persist_alert(alert, history_loading=True)
 
             history.append(alert)
 
         return history[-MAX_HISTORY:]
 
-    def _save_history(self):
+    def _import_legacy_history(self):
+        """Move an old alerts.json into the database, once."""
 
-        _atomic_write_json(self.history_path, {"alerts": self.history})
+        if (
+            self.history_path is None
+            or not os.path.exists(self.history_path)
+            or self.store.count_alerts(self.class_id) > 0
+        ):
+            return
+
+        legacy = _read_json(self.history_path, {}).get("alerts", [])
+        imported = self.store.import_legacy_alerts(legacy, self.class_id)
+
+        if imported:
+            logger.info(
+                "Imported %d legacy alert(s) of class %s into SQLite",
+                imported, self.class_id,
+            )
+
+    def _save_history(self):
+        """JSON fallback (only used when there is no database)."""
+
+        if self.store is None and self.history_path is not None:
+            _atomic_write_json(self.history_path, {"alerts": self.history})
+
+    def _persist_alert(self, alert, history_loading=False):
+        """Write one new / changed alert to the database (or JSON)."""
+
+        if self.store is not None:
+            self.store.upsert_alert(alert, self.class_id)
+        elif not history_loading:
+            self._save_history()
 
     def _save_settings(self):
 
-        _atomic_write_json(self.settings_path, self.settings)
+        if self.settings_path is not None:
+            _atomic_write_json(self.settings_path, self.settings)
 
     # --------------------------------------------------------
     # runtime state
@@ -568,11 +637,12 @@ class AlertEngine:
     # session lifecycle
     # --------------------------------------------------------
 
-    def start_session(self, now=None):
+    def start_session(self, now=None, session_id=None):
 
         with self.lock:
             self._reset_runtime()
             self.session_active = True
+            self.session_id = session_id
             self.session_started_at = time.time() if now is None else now
 
     def end_session(self, now=None):
@@ -892,6 +962,8 @@ class AlertEngine:
             "acknowledged": False,
             "acknowledged_at": None,
             "session_started_at": self.session_started_at,
+            "session_id": self.session_id,
+            "class_id": self.class_id,
         }
 
         self.active[alert_type] = alert
@@ -904,7 +976,7 @@ class AlertEngine:
 
         self.history.append(alert)
         self.history = self.history[-MAX_HISTORY:]
-        self._save_history()
+        self._persist_alert(alert)
 
     def _resolve(self, alert_type, now, reason):
 
@@ -917,7 +989,7 @@ class AlertEngine:
         alert["resolved_at"] = now
         alert["resolved_reason"] = reason
 
-        self._save_history()
+        self._persist_alert(alert)
 
     def _resolve_all(self, reason, now):
 
@@ -995,7 +1067,7 @@ class AlertEngine:
                 if alert["type"] == "TEST" and alert["status"] == "active":
                     self._resolve("TEST", now, "acknowledged")
                 else:
-                    self._save_history()
+                    self._persist_alert(alert)
 
                 return True
 
@@ -1015,7 +1087,12 @@ class AlertEngine:
                     return "active"
 
                 del self.history[index]
-                self._save_history()
+
+                if self.store is not None:
+                    self.store.delete_alert(alert_id)
+                else:
+                    self._save_history()
+
                 return "ok"
 
         return "missing"
@@ -1026,7 +1103,11 @@ class AlertEngine:
 
             before = len(self.history)
             self.history = [a for a in self.history if a["status"] == "active"]
-            self._save_history()
+
+            if self.store is not None:
+                self.store.delete_resolved_alerts(self.class_id)
+            else:
+                self._save_history()
 
             return before - len(self.history)
 
@@ -1056,6 +1137,8 @@ class AlertEngine:
                 "acknowledged": False,
                 "acknowledged_at": None,
                 "session_started_at": self.session_started_at,
+                "session_id": self.session_id,
+                "class_id": self.class_id,
             }
 
             self.active["TEST"] = alert
@@ -1127,25 +1210,54 @@ def _send_email(to_address, alert):
 # MODULE-LEVEL ENGINE + FUNCTIONS USED BY OTHER MODULES
 # ============================================================
 
-engine = AlertEngine()
+_engines = {}
+_engines_lock = threading.RLock()
 
 
-def start_alert_session():
-    engine.start_session()
+def get_alert_engine(class_id=DEFAULT_CLASS_ID):
+    """The AlertEngine of a class (created on first use). Every class has
+    its own thresholds, runtime state and alert history."""
+
+    with _engines_lock:
+
+        found = _engines.get(class_id)
+
+        if found is None:
+
+            data_dir = (
+                DATA_DIR if class_id == DEFAULT_CLASS_ID
+                else os.path.join(DATA_DIR, "classes", class_id)
+            )
+
+            found = _engines[class_id] = AlertEngine(
+                data_dir=data_dir,
+                store=get_storage(),
+                class_id=class_id,
+            )
+
+        return found
 
 
-def end_alert_session():
-    engine.end_session()
+def start_alert_session(class_id=DEFAULT_CLASS_ID, session_id=None):
+    get_alert_engine(class_id).start_session(session_id=session_id)
 
 
-def evaluate_alerts(person_boxes, results, frame_shape):
-    return engine.evaluate(person_boxes, results, frame_shape)
+def end_alert_session(class_id=DEFAULT_CLASS_ID):
+    get_alert_engine(class_id).end_session()
 
 
-def draw_teacher_zone(frame):
+def evaluate_alerts(
+    person_boxes, results, frame_shape, class_id=DEFAULT_CLASS_ID, now=None
+):
+    return get_alert_engine(class_id).evaluate(
+        person_boxes, results, frame_shape, now=now
+    )
+
+
+def draw_teacher_zone(frame, class_id=DEFAULT_CLASS_ID):
     """Outline the teacher zone on a live frame (used while calibrating)."""
 
-    settings = engine.get_settings()
+    settings = get_alert_engine(class_id).get_settings()
 
     if not settings["teacher_check_enabled"] or not settings["teacher_zone"]:
         return
@@ -1174,10 +1286,21 @@ def draw_teacher_zone(frame):
 # ROUTES
 # ============================================================
 
+def _engine_for_request():
+    """The AlertEngine for ?class_id=... (default class when omitted)."""
+
+    return get_alert_engine(normalize_class_id(request.args.get("class_id")))
+
+
+@alerts_bp.errorhandler(ValueError)
+def _bad_class_id(error):
+    return jsonify({"success": False, "message": str(error)}), 400
+
+
 @alerts_bp.route("/alerts", methods=["GET"])
 def list_alerts():
 
-    data = engine.get_alerts()
+    data = _engine_for_request().get_alerts()
 
     return jsonify({"success": True, **data})
 
@@ -1185,13 +1308,13 @@ def list_alerts():
 @alerts_bp.route("/alerts/status", methods=["GET"])
 def alerts_status():
 
-    return jsonify({"success": True, **engine.get_status()})
+    return jsonify({"success": True, **_engine_for_request().get_status()})
 
 
 @alerts_bp.route("/alerts/settings", methods=["GET"])
 def get_alert_settings():
 
-    return jsonify({"success": True, "settings": engine.get_settings()})
+    return jsonify({"success": True, "settings": _engine_for_request().get_settings()})
 
 
 @alerts_bp.route("/alerts/settings", methods=["PUT", "POST"])
@@ -1200,7 +1323,7 @@ def save_alert_settings():
     patch = request.get_json(silent=True)
 
     try:
-        settings = engine.update_settings(patch)
+        settings = _engine_for_request().update_settings(patch)
     except ValueError as error:
         return jsonify({"success": False, "message": str(error)}), 400
 
@@ -1210,7 +1333,7 @@ def save_alert_settings():
 @alerts_bp.route("/alerts/<alert_id>/acknowledge", methods=["POST"])
 def acknowledge_alert(alert_id):
 
-    if not ID_PATTERN.match(alert_id) or not engine.acknowledge(alert_id):
+    if not ID_PATTERN.match(alert_id) or not _engine_for_request().acknowledge(alert_id):
         return jsonify({"success": False, "message": "Alert not found"}), 404
 
     return jsonify({"success": True})
@@ -1222,7 +1345,7 @@ def delete_alert(alert_id):
     if not ID_PATTERN.match(alert_id):
         return jsonify({"success": False, "message": "Alert not found"}), 404
 
-    outcome = engine.delete(alert_id)
+    outcome = _engine_for_request().delete(alert_id)
 
     if outcome == "active":
         return jsonify({
@@ -1240,13 +1363,13 @@ def delete_alert(alert_id):
 @alerts_bp.route("/alerts/clear-history", methods=["POST"])
 def clear_alert_history():
 
-    return jsonify({"success": True, "removed": engine.clear_resolved()})
+    return jsonify({"success": True, "removed": _engine_for_request().clear_resolved()})
 
 
 @alerts_bp.route("/alerts/test", methods=["POST"])
 def create_test_alert():
 
-    return jsonify({"success": True, "alert": engine.send_test_alert()})
+    return jsonify({"success": True, "alert": _engine_for_request().send_test_alert()})
 
 
 logger.debug("Alerts module loaded successfully!")

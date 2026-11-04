@@ -1,755 +1,456 @@
-import logging
-from flask import Blueprint, request, jsonify, Response
+"""Camera routes: one independent camera per class (point 12).
 
+Every route takes an optional class_id (query string or JSON body). A
+request without one uses the default class, so the original single-camera
+frontend keeps working. Each class has its own camera connection, AI thread,
+students, analytics and alerts (see engine.py).
+
+    POST /camera/connect      {"class_id": "grade-5a", "type": "webcam", "index": 0}
+    GET  /camera/status?class_id=grade-5a
+    POST /camera/disconnect   {"class_id": "grade-5a"}
+    GET  /video_feed?class_id=grade-5a
+    GET  /emotion-results?class_id=grade-5a
+    GET  /classes             every class and its camera state
+"""
+
+import logging
 import os
-import cv2
 import threading
 import time
 
-from eye_tracking import reset_eye_tracks
-from reports import save_session_report
+import cv2
+from flask import Blueprint, Response, jsonify, request
+
 from alerts import draw_teacher_zone
 from analytics import annotate_engagement
-
-from ai_processing import (
-    start_ai_thread,
-    stop_ai_thread,
-    set_latest_frame,
-    get_latest_results,
-    clear_latest_results
-)
+from class_id import DEFAULT_CLASS_ID, normalize_class_id
+from engine import get_class_engine, list_class_engines
+from reports import save_session_report
 
 logger = logging.getLogger(__name__)
 
+camera_bp = Blueprint("camera", __name__)
 
-# ============================================================
-# CAMERA BLUEPRINT
-# ============================================================
-
-camera_bp = Blueprint(
-    "camera",
-    __name__
-)
+# Every connected camera needs CPU for the AI models. Refuse more than this
+# many at the same time (set MAX_LIVE_CAMERAS to change it).
+MAX_LIVE_CAMERAS = int(os.environ.get("MAX_LIVE_CAMERAS", "4"))
 
 
 # ============================================================
-# CAMERA VARIABLES
+# ONE CAMERA
 # ============================================================
 
-CAMERA_SOURCE = None
-CAMERA_TYPE = "none"
-MOBILE_CAMERA_URL = ""
+class CameraSource:
+    """The camera of one class: what to open, and the open capture."""
 
-camera = None
+    def __init__(self, class_id):
 
-camera_lock = threading.Lock()
+        self.class_id = class_id
+        self.lock = threading.Lock()
+        self.source = None          # int (webcam index) or URL string
+        self.type = "none"          # "webcam" | "phone" | "none"
+        self.capture = None
 
+    @property
+    def has_source(self):
+        return self.source is not None and self.source != ""
 
-# ============================================================
-# GET CAMERA
-# ============================================================
+    @property
+    def is_open(self):
+        return self.capture is not None and self.capture.isOpened()
 
-def get_camera():
+    def configure(self, source, cam_type):
+        """Release the old camera and remember the new source."""
 
-    global camera
-    global CAMERA_SOURCE
-    global CAMERA_TYPE
-    global MOBILE_CAMERA_URL
+        with self.lock:
+            self._release()
+            self.source = source
+            self.type = cam_type
 
-    source = (
-        CAMERA_SOURCE
-        if CAMERA_SOURCE is not None
-        else (
-            MOBILE_CAMERA_URL
-            if MOBILE_CAMERA_URL
-            else None
-        )
-    )
+    def clear(self):
+        """Forget the source (disconnect)."""
 
-    if source is None or source == "":
-        return None
+        with self.lock:
+            self._release()
+            self.source = None
+            self.type = "none"
 
-    with camera_lock:
+    def release_capture(self):
+        """Drop a broken capture; get_capture() will reconnect."""
 
-        if (
-            camera is None
-            or
-            not camera.isOpened()
-        ):
+        with self.lock:
+            self._release()
 
-            logger.info("Connecting to camera (%s): %s", CAMERA_TYPE, source)
+    def _release(self):
 
+        if self.capture is not None:
             try:
-
-                # ====================================================
-                # WEBCAM
-                # ====================================================
-
-                if (
-                    isinstance(source, int)
-                    or
-                    (
-                        isinstance(source, str)
-                        and
-                        source.strip().isdigit()
-                    )
-                ):
-
-                    cam_idx = int(source)
-
-                    if os.name == "nt":
-
-                        camera = cv2.VideoCapture(
-                            cam_idx,
-                            cv2.CAP_DSHOW
-                        )
-
-                    else:
-
-                        camera = cv2.VideoCapture(
-                            cam_idx
-                        )
-
-                # ====================================================
-                # PHONE / IP CAMERA
-                # ====================================================
-
-                else:
-
-                    camera = cv2.VideoCapture(
-                        str(source)
-                    )
-
-            except Exception as e:
-
-                logger.exception("Exception creating VideoCapture")
-
-                camera = None
-
-                return None
-
-            # ========================================================
-            # REDUCE CAMERA BUFFER
-            # ========================================================
-
-            try:
-
-                camera.set(
-                    cv2.CAP_PROP_BUFFERSIZE,
-                    1
-                )
-
+                self.capture.release()
             except Exception:
-
                 pass
 
-            # ========================================================
-            # CHECK CONNECTION
-            # ========================================================
+        self.capture = None
 
-            if (
-                camera is not None
-                and
-                camera.isOpened()
-            ):
+    def get_capture(self):
+        """The open capture, connecting first when needed (None = failed)."""
 
-                logger.info("%s camera connected successfully!", CAMERA_TYPE.capitalize())
+        if not self.has_source:
+            return None
 
+        with self.lock:
+
+            if self.capture is not None and self.capture.isOpened():
+                return self.capture
+
+            logger.info(
+                "Connecting to camera [%s] (%s): %s",
+                self.class_id, self.type, self.source,
+            )
+
+            try:
+                is_webcam = isinstance(self.source, int) or (
+                    isinstance(self.source, str)
+                    and self.source.strip().isdigit()
+                )
+
+                if is_webcam:
+                    index = int(self.source)
+                    self.capture = (
+                        cv2.VideoCapture(index, cv2.CAP_DSHOW)
+                        if os.name == "nt" else cv2.VideoCapture(index)
+                    )
+                else:
+                    self.capture = cv2.VideoCapture(str(self.source))
+
+            except Exception:
+                logger.exception(
+                    "Exception creating VideoCapture [%s]", self.class_id
+                )
+                self.capture = None
+                return None
+
+            try:
+                self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            except Exception:
+                pass
+
+            if self.capture.isOpened():
+                logger.info(
+                    "%s camera connected successfully [%s]!",
+                    self.type.capitalize(), self.class_id,
+                )
             else:
+                logger.error(
+                    "Could not connect to %s camera [%s].",
+                    self.type, self.class_id,
+                )
+                self.capture = None
 
-                logger.error("Could not connect to %s camera.", CAMERA_TYPE)
+            return self.capture
 
-                camera = None
 
-        return camera
+_sources = {}
+_sources_lock = threading.Lock()
+
+
+def get_camera_source(class_id=DEFAULT_CLASS_ID):
+
+    with _sources_lock:
+
+        source = _sources.get(class_id)
+
+        if source is None:
+            source = _sources[class_id] = CameraSource(class_id)
+
+        return source
+
+
+def _connected_camera_count():
+
+    with _sources_lock:
+        return sum(1 for s in _sources.values() if s.has_source)
 
 
 # ============================================================
-# CAMERA CONNECT API
+# REQUEST HELPERS
 # ============================================================
 
-@camera_bp.route(
-    "/camera/connect",
-    methods=["POST"]
-)
+def _class_id(data=None):
+    """class_id from the JSON body or the query string."""
+
+    value = (data or {}).get("class_id") or request.args.get("class_id")
+
+    return normalize_class_id(value)
+
+
+@camera_bp.errorhandler(ValueError)
+def _bad_class_id(error):
+    return jsonify({"success": False, "message": str(error)}), 400
+
+
+def _status_payload(class_id):
+
+    camera = get_camera_source(class_id)
+
+    return {
+        "class_id": class_id,
+        "connected": camera.has_source and camera.is_open,
+        "type": camera.type,
+        "source": str(camera.source) if camera.source is not None else "",
+        "url": str(camera.source) if camera.source is not None else "",
+    }
+
+
+# ============================================================
+# CONNECT / STATUS / DISCONNECT
+# ============================================================
+
+@camera_bp.route("/camera/connect", methods=["POST"])
 def connect_camera():
 
-    global CAMERA_SOURCE
-    global CAMERA_TYPE
-    global MOBILE_CAMERA_URL
-    global camera
+    data = request.get_json(silent=True) or {}
+    class_id = _class_id(data)
 
-    data = request.get_json() or {}
-
-    cam_type = (
-        data.get(
-            "type",
-            "phone"
-        )
-        .lower()
-    )
-
-    # ========================================================
-    # WEBCAM
-    # ========================================================
+    cam_type = str(data.get("type", "phone")).lower()
 
     if cam_type == "webcam":
 
-        cam_index = data.get(
-            "index",
-            0
-        )
-
         try:
-
-            cam_index = int(
-                cam_index
-            )
-
-        except (
-            ValueError,
-            TypeError
-        ):
-
+            cam_index = int(data.get("index", 0))
+        except (ValueError, TypeError):
             cam_index = 0
 
         new_source = cam_index
-
-        display_name = (
-            f"Webcam "
-            f"(Device {cam_index})"
-        )
-
-    # ========================================================
-    # PHONE CAMERA
-    # ========================================================
+        display_name = f"Webcam (Device {cam_index})"
 
     else:
 
         cam_type = "phone"
-
-        new_url = (
-            data.get(
-                "url",
-                ""
-            )
-            .strip()
-        )
+        new_url = str(data.get("url", "")).strip()
 
         if not new_url:
-
             return jsonify({
-
                 "success": False,
-
-                "message":
-                    "Camera URL cannot be "
-                    "empty for phone mode"
-
+                "message": "Camera URL cannot be empty for phone mode",
             }), 400
 
         new_source = new_url
+        display_name = f"Phone Camera ({new_url})"
 
-        display_name = (
-            f"Phone Camera "
-            f"({new_url})"
-        )
-
-    # ========================================================
-    # RELEASE OLD CAMERA
-    # ========================================================
-
-    with camera_lock:
-
-        if camera is not None:
-
-            try:
-
-                camera.release()
-
-            except Exception:
-
-                pass
-
-            camera = None
-
-        CAMERA_SOURCE = new_source
-        CAMERA_TYPE = cam_type
-
-        MOBILE_CAMERA_URL = str(
-            new_source
-        )
-
-    # ========================================================
-    # RESET AI DATA
-    # ========================================================
-
-    set_latest_frame(None)
-
-    clear_latest_results()
-    reset_eye_tracks()
-
-
-    logger.info("Camera source updated: [%s] %s", CAMERA_TYPE, new_source)
-
-
-    # ========================================================
-    # ACTUALLY OPEN CAMERA
-    # ========================================================
-
-    cap = get_camera()
+    camera = get_camera_source(class_id)
 
     if (
-        cap is None
-        or
-        not cap.isOpened()
+        not camera.has_source
+        and _connected_camera_count() >= MAX_LIVE_CAMERAS
     ):
+        return jsonify({
+            "success": False,
+            "message": (
+                f"At most {MAX_LIVE_CAMERAS} cameras can run at the same "
+                "time. Disconnect another class first."
+            ),
+        }), 409
 
-        with camera_lock:
+    engine = get_class_engine(class_id)
 
-            if camera is not None:
+    camera.configure(new_source, cam_type)
 
-                try:
+    engine.set_latest_frame(None)
+    engine.clear_latest_results()
+    engine.tracker.reset()
 
-                    camera.release()
+    logger.info(
+        "Camera source updated [%s]: [%s] %s", class_id, cam_type, new_source
+    )
 
-                except Exception:
+    capture = camera.get_capture()
 
-                    pass
+    if capture is None or not capture.isOpened():
 
-            camera = None
-
-        CAMERA_SOURCE = None
-        CAMERA_TYPE = "none"
-        MOBILE_CAMERA_URL = ""
+        camera.clear()
 
         return jsonify({
-
             "success": False,
-
-            "message":
-                f"Could not connect to "
-                f"{display_name}"
-
+            "message": f"Could not connect to {display_name}",
         }), 500
 
-    # ========================================================
-    # START AI
-    # ========================================================
-
-    start_ai_thread()
+    engine.start()
 
     return jsonify({
-
         "success": True,
-
-        "message":
-            f"{display_name} "
-            "connected successfully",
-
-        "type":
-            CAMERA_TYPE,
-
-        "source":
-            str(CAMERA_SOURCE),
-
-        "url":
-            MOBILE_CAMERA_URL
-
+        "message": f"{display_name} connected successfully",
+        "class_id": class_id,
+        "type": camera.type,
+        "source": str(camera.source),
+        "url": str(camera.source),
     })
 
 
-# ============================================================
-# CAMERA STATUS
-# ============================================================
-
-@camera_bp.route(
-    "/camera/status",
-    methods=["GET"]
-)
+@camera_bp.route("/camera/status", methods=["GET"])
 def camera_status():
 
-    global CAMERA_SOURCE
-    global CAMERA_TYPE
-    global MOBILE_CAMERA_URL
-    global camera
-
-    has_source = (
-        CAMERA_SOURCE is not None
-    ) or (
-        MOBILE_CAMERA_URL != ""
-    )
-
-    is_open = (
-        camera is not None
-        and
-        camera.isOpened()
-    )
-
-    connected = (
-        has_source
-        and
-        is_open
-    )
-
-    return jsonify({
-
-        "connected":
-            connected,
-
-        "type":
-            CAMERA_TYPE,
-
-        "source":
-            (
-                str(CAMERA_SOURCE)
-                if CAMERA_SOURCE is not None
-                else ""
-            ),
-
-        "url":
-            MOBILE_CAMERA_URL
-
-    })
+    return jsonify(_status_payload(_class_id()))
 
 
-# ============================================================
-# CAMERA DISCONNECT
-# ============================================================
-
-@camera_bp.route(
-    "/camera/disconnect",
-    methods=["POST"]
-)
+@camera_bp.route("/camera/disconnect", methods=["POST"])
 def disconnect_camera():
 
-    global CAMERA_SOURCE
-    global CAMERA_TYPE
-    global MOBILE_CAMERA_URL
-    global camera
+    data = request.get_json(silent=True) or {}
+    class_id = _class_id(data)
 
-    stop_ai_thread()
+    engine = get_class_engine(class_id)
+    camera = get_camera_source(class_id)
+
+    engine.stop()
 
     # Build and store the final report for the session that just ended.
     try:
-        saved_report = save_session_report()
-    except Exception as e:
-        logger.exception("Could not save session report")
+        saved_report = save_session_report(class_id)
+    except Exception:
+        logger.exception("Could not save session report [%s]", class_id)
         saved_report = None
 
-    with camera_lock:
+    camera.clear()
 
-        if camera is not None:
+    engine.set_latest_frame(None)
+    engine.clear_latest_results()
+    engine.tracker.reset()
 
-            try:
-
-                camera.release()
-
-            except Exception:
-
-                pass
-
-            camera = None
-
-        CAMERA_SOURCE = None
-        CAMERA_TYPE = "none"
-        MOBILE_CAMERA_URL = ""
-
-    set_latest_frame(None)
-
-    clear_latest_results()
-    reset_eye_tracks()
-
-    logger.info("Camera disconnected")
+    logger.info("Camera disconnected [%s]", class_id)
 
     return jsonify({
-
         "success": True,
+        "message": "Camera disconnected",
+        "class_id": class_id,
+        "report": saved_report,
+    })
 
-        "message":
-            "Camera disconnected",
 
-        "report":
-            saved_report
+@camera_bp.route("/classes", methods=["GET"])
+def list_classes():
+    """Every class that has a camera or a running engine."""
 
+    with _sources_lock:
+        class_ids = set(_sources)
+
+    class_ids |= set(list_class_engines())
+    class_ids.add(DEFAULT_CLASS_ID)
+
+    classes = []
+
+    for class_id in sorted(class_ids):
+
+        payload = _status_payload(class_id)
+        engine = list_class_engines().get(class_id)
+
+        payload["session_active"] = bool(engine and engine.session_active)
+        classes.append(payload)
+
+    return jsonify({
+        "success": True,
+        "max_cameras": MAX_LIVE_CAMERAS,
+        "classes": classes,
     })
 
 
 # ============================================================
-# CAMERA FRAME GENERATOR
+# VIDEO STREAM
 # ============================================================
 
-def generate_frames():
+def generate_frames(class_id=DEFAULT_CLASS_ID):
 
-    global camera
+    camera = get_camera_source(class_id)
+    engine = get_class_engine(class_id)
 
     while True:
 
-        cap = get_camera()
+        capture = camera.get_capture()
 
-        if (
-            cap is None
-            or
-            not cap.isOpened()
-        ):
-
+        if capture is None or not capture.isOpened():
             time.sleep(1)
-
             continue
 
-        success, frame = cap.read()
+        success, frame = capture.read()
 
         if not success:
 
-            logger.warning("Could not read frame from camera (%s).", CAMERA_TYPE)
-
-            with camera_lock:
-
-                if camera is not None:
-
-                    try:
-
-                        camera.release()
-
-                    except Exception:
-
-                        pass
-
-                camera = None
-
-            time.sleep(1)
-
-            continue
-
-        # ====================================================
-        # MIRROR WEBCAM
-        # ====================================================
-
-        if CAMERA_TYPE == "webcam":
-
-            frame = cv2.flip(
-                frame,
-                1
+            logger.warning(
+                "Could not read frame from camera [%s] (%s).",
+                class_id, camera.type,
             )
 
-        # ====================================================
-        # SAVE LATEST FRAME
-        # ====================================================
+            camera.release_capture()
+            time.sleep(1)
+            continue
 
-        set_latest_frame(
-            frame
-        )
+        # mirror webcam
+        if camera.type == "webcam":
+            frame = cv2.flip(frame, 1)
 
-        # ====================================================
-        # GET AI RESULTS
-        # ====================================================
+        engine.set_latest_frame(frame)
 
-        results_copy = (
-            get_latest_results()
-        )
+        # draw the latest AI results
+        for result in engine.get_latest_results():
 
-        if results_copy is None:
-
-            results_copy = []
-
-        # ====================================================
-        # DRAW AI RESULTS
-        # ====================================================
-
-        for result in results_copy:
-
-            face_x = result[
-                "x"
-            ]
-
-            face_y = result[
-                "y"
-            ]
-
-            fw = result[
-                "width"
-            ]
-
-            fh = result[
-                "height"
-            ]
+            face_x, face_y = result["x"], result["y"]
+            fw, fh = result["width"], result["height"]
 
             cv2.rectangle(
-
-                frame,
-
-                (
-                    face_x,
-                    face_y
-                ),
-
-                (
-                    face_x + fw,
-                    face_y + fh
-                ),
-
-                (0, 255, 0),
-
-                2
-            )
-
-            emotion_text = (
-
-                f'{result["emotion"]}: '
-                f'{result["confidence"]:.1f}%'
-
-            )
-
-            eye_text = (
-
-                f'Eyes: '
-                f'{result["eye_state"]}'
-
+                frame, (face_x, face_y), (face_x + fw, face_y + fh),
+                (0, 255, 0), 2,
             )
 
             cv2.putText(
-
                 frame,
-
-                emotion_text,
-
-                (
-                    face_x,
-                    max(
-                        face_y - 35,
-                        20
-                    )
-                ),
-
-                cv2.FONT_HERSHEY_SIMPLEX,
-
-                0.8,
-
-                (0, 255, 0),
-
-                2
+                f'{result["emotion"]}: {result["confidence"]:.1f}%',
+                (face_x, max(face_y - 35, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2,
             )
 
             cv2.putText(
-
                 frame,
-
-                eye_text,
-
-                (
-                    face_x,
-                    max(
-                        face_y - 10,
-                        20
-                    )
-                ),
-
-                cv2.FONT_HERSHEY_SIMPLEX,
-
-                0.7,
-
-                (255, 0, 0),
-
-                2
+                f'Eyes: {result["eye_state"]}',
+                (face_x, max(face_y - 10, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2,
             )
-                # ====================================================
-        # TEACHER ZONE (Module 5, only while teacher check is on)
-        # ====================================================
 
+        # teacher zone (only while the teacher check is on)
         try:
-
-            draw_teacher_zone(
-                frame
-            )
-
+            draw_teacher_zone(frame, class_id)
         except Exception:
+            pass
 
-            pass    
-
-        # ====================================================
-        # ENCODE JPEG
-        # ====================================================
-
-        success, buffer = cv2.imencode(
-            ".jpg",
-            frame
-        )
+        success, buffer = cv2.imencode(".jpg", frame)
 
         if not success:
-
             continue
 
-        frame_bytes = (
-            buffer.tobytes()
-        )
-
         yield (
-
             b"--frame\r\n"
             b"Content-Type: image/jpeg\r\n\r\n"
-            +
-            frame_bytes
-            +
-            b"\r\n"
-
+            + buffer.tobytes()
+            + b"\r\n"
         )
 
 
-# ============================================================
-# LIVE VIDEO API
-# ============================================================
-
-@camera_bp.route(
-    "/video_feed"
-)
+@camera_bp.route("/video_feed")
 def video_feed():
 
     return Response(
-
-        generate_frames(),
-
-        mimetype=(
-            "multipart/x-mixed-replace; "
-            "boundary=frame"
-        )
-
+        generate_frames(_class_id()),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
     )
 
 
-# ============================================================
-# LATEST EMOTION RESULTS
-# ============================================================
-
-@camera_bp.route(
-    "/emotion-results"
-)
+@camera_bp.route("/emotion-results")
 def emotion_results():
 
-    results_copy = (
-        get_latest_results()
-    )
-
-    if results_copy is None:
-
-        results_copy = []
-
-    # Single source of truth for the per-student score (analytics.py).
-    results_copy = annotate_engagement(
-        results_copy
+    faces = annotate_engagement(
+        get_class_engine(_class_id()).get_latest_results()
     )
 
     return jsonify({
-
-        "success":
-            True,
-
-        "faces_detected":
-            len(results_copy),
-
-        "faces":
-            results_copy
-
+        "success": True,
+        "faces_detected": len(faces),
+        "faces": faces,
     })
-
-
-logger.debug("Camera module loaded successfully!")
