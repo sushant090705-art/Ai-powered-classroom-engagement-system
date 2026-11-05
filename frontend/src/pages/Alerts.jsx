@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ThemeToggle from "../components/ThemeToggle";
@@ -9,8 +10,6 @@ const POLL_MS = 3000;
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-// Zones follow the live video as it is shown on screen (the webcam view is
-// already mirrored), so "Left side" means the left of what you see.
 const ZONE_PRESETS = [
   { label: "Left side", zone: { x1: 0, y1: 0, x2: 0.35, y2: 1 } },
   { label: "Centre", zone: { x1: 0.325, y1: 0, x2: 0.675, y2: 1 } },
@@ -38,7 +37,11 @@ const REASON_LABELS = {
   replaced: "Replaced by a newer one",
 };
 
-const PRIORITY_LABELS = { high: "Act now", medium: "Consider", low: "FYI" };
+const PRIORITY_LABELS = {
+  high: "Act now",
+  medium: "Consider",
+  low: "FYI",
+};
 
 function formatClock(seconds) {
   return new Date(seconds * 1000).toLocaleTimeString([], {
@@ -120,8 +123,6 @@ function Alerts() {
   const [formMessage, setFormMessage] = useState(null);
   const [actionError, setActionError] = useState("");
 
-  // ---------- live data ----------
-
   const load = useCallback(async () => {
     try {
       const [statusResponse, alertsResponse] = await Promise.all([
@@ -166,8 +167,6 @@ function Alerts() {
     loadSettings();
   }, [loadSettings]);
 
-  // ---------- actions ----------
-
   const call = async (path, options) => {
     setActionError("");
 
@@ -196,8 +195,6 @@ function Alerts() {
     if (!window.confirm("Remove all resolved alerts from the history?")) return;
     call("/alerts/clear-history", { method: "POST" });
   };
-
-  // ---------- settings form ----------
 
   const setField = (key, value) => {
     setFormMessage(null);
@@ -265,8 +262,6 @@ function Alerts() {
   const dirty =
     settings && draft && JSON.stringify(settings) !== JSON.stringify(draft);
 
-  // ---------- derived values ----------
-
   const monitoringState = offline
     ? { tone: "off", text: "Backend offline" }
     : !status?.session_active
@@ -312,108 +307,131 @@ function Alerts() {
   return (
     <div className="al-page">
       <header className="al-nav">
-        <div className="al-logo">
+        <button
+          className="al-logo"
+          onClick={() => navigate("/dashboard")}
+          aria-label="Go to dashboard"
+        >
           <span>◉</span>
           <b>ClassroomAI</b>
-        </div>
+        </button>
 
         <div className="al-nav-right">
           <ThemeToggle />
           <button className="al-btn" onClick={() => navigate("/dashboard")}>
-            Dashboard
+            Dashboard <span>↗</span>
           </button>
         </div>
       </header>
 
       <main className="al-content">
-        {/* ---------- heading ---------- */}
-        <div className="al-heading">
+        <section className="al-hero">
           <div>
-            <span className={`al-state al-state--${monitoringState.tone}`}>
-              <i /> {monitoringState.text}
-            </span>
-            <h1>Alerts and recommendations</h1>
+            <div className="al-eyebrow">
+              <span></span> CLASSROOM MONITORING
+            </div>
+
+            <h1>Alerts <span>&</span> Recommendations.</h1>
+
             <p>
-              Warnings for the institution when a class needs attention, with
-              suggested next steps for the teacher.
+              Stay informed when a class needs attention. Review live warnings
+              and suggested next steps for the teacher.
             </p>
+
+            <div className={`al-state al-state--${monitoringState.tone}`}>
+              <i /> {monitoringState.text}
+            </div>
           </div>
 
-          <button className="al-btn" onClick={() => navigate("/classroom")}>
-            Live classroom
+          <button className="al-live-btn" onClick={() => navigate("/classroom")}>
+            <span>←</span> Live classroom
           </button>
-        </div>
+        </section>
 
         {actionError && (
           <div className="al-banner al-banner--error" role="alert">
+            <span>!</span>
             {actionError}
           </div>
         )}
 
-        {/* ---------- live status ---------- */}
-        <section className="al-status" aria-label="Live classroom status">
-          <div className={`al-stat ${teacher.tone}`}>
-            <small>Teacher</small>
-            <strong>{teacher.value}</strong>
-            <em>{teacher.hint}</em>
+        <section className="al-overview">
+          <div className="al-section-kicker">
+            <span>01</span> LIVE CLASSROOM STATUS
           </div>
 
-          <div className={`al-stat ${engagementTone}`}>
-            <small>Class engagement</small>
-            <strong>{running && engagement != null ? `${Math.round(engagement)}%` : "—"}</strong>
-            <em>
-              {running && engagement != null
-                ? "Average over the last few seconds"
-                : "Needs enough faces in view"}
-            </em>
-          </div>
+          <div className="al-status">
+            <article className={`al-stat ${teacher.tone}`}>
+              <small>TEACHER PRESENCE</small>
+              <strong>{teacher.value}</strong>
+              <em>{teacher.hint}</em>
+            </article>
 
-          <div
-            className={`al-stat ${
-              running && status.drowsy_percent >= 20 ? "bad" : ""
-            }`}
-          >
-            <small>Drowsy or closed eyes</small>
-            <strong>
-              {running && status.drowsy_percent != null
-                ? `${Math.round(status.drowsy_percent)}%`
-                : "—"}
-            </strong>
-            <em>Share of visible students</em>
-          </div>
+            <article className={`al-stat ${engagementTone}`}>
+              <small>CLASS ENGAGEMENT</small>
+              <strong>
+                {running && engagement != null
+                  ? `${Math.round(engagement)}%`
+                  : "—"}
+              </strong>
+              <em>
+                {running && engagement != null
+                  ? "Average over the last few seconds"
+                  : "Needs enough faces in view"}
+              </em>
+            </article>
 
-          <div className="al-stat">
-            <small>Faces in view</small>
-            <strong>{running ? status.students_in_view : "—"}</strong>
-            <em>
-              {running
-                ? `${status.persons_in_view} ${
-                    status.persons_in_view === 1 ? "person" : "people"
-                  } detected`
-                : ""}
-            </em>
+            <article
+              className={`al-stat ${
+                running && status.drowsy_percent >= 20 ? "bad" : ""
+              }`}
+            >
+              <small>DROWSY OR CLOSED EYES</small>
+              <strong>
+                {running && status.drowsy_percent != null
+                  ? `${Math.round(status.drowsy_percent)}%`
+                  : "—"}
+              </strong>
+              <em>Share of visible students</em>
+            </article>
+
+            <article className="al-stat">
+              <small>FACES IN VIEW</small>
+              <strong>{running ? status.students_in_view : "—"}</strong>
+              <em>
+                {running
+                  ? `${status.persons_in_view} ${
+                      status.persons_in_view === 1 ? "person" : "people"
+                    } detected`
+                  : ""}
+              </em>
+            </article>
           </div>
         </section>
 
-        {/* ---------- active alerts ---------- */}
         <section className="al-section" aria-live="polite">
           <div className="al-section-head">
-            <h2>
-              Active alerts
-              {activeAlerts.length > 0 && (
-                <span className="al-count">{activeAlerts.length}</span>
-              )}
-            </h2>
+            <div>
+              <div className="al-section-kicker">
+                <span>02</span> NEEDS ATTENTION
+              </div>
+              <h2>Active alerts</h2>
+            </div>
+
+            {activeAlerts.length > 0 && (
+              <span className="al-count">{activeAlerts.length} active</span>
+            )}
           </div>
 
           {activeAlerts.length === 0 ? (
             <div className="al-empty">
+              <span className="al-empty-mark">✓</span>
               <strong>Nothing needs attention.</strong>
-              <span>
+              <p>
                 {running
                   ? "All checks are passing for this session."
                   : "Start a camera session and the checks will run automatically."}
-              </span>
+              </p>
             </div>
           ) : (
             <div className="al-alert-list">
@@ -460,23 +478,27 @@ function Alerts() {
           )}
         </section>
 
-        {/* ---------- live suggestions ---------- */}
         <section className="al-section">
           <div className="al-section-head">
-            <h2>Suggested actions right now</h2>
-            <p>
-              Based on the last few seconds of engagement, eye state and
-              expressions. These are prompts for the teacher, not verdicts.
-            </p>
+            <div>
+              <div className="al-section-kicker">
+                <span>03</span> TEACHER GUIDANCE
+              </div>
+              <h2>Suggested actions right now</h2>
+              <p>
+                Based on recent engagement, eye state and expressions. These
+                are prompts for the teacher, not verdicts.
+              </p>
+            </div>
           </div>
 
           {recommendations.length === 0 ? (
-            <div className="al-empty">
-              <span>
+            <div className="al-empty al-empty--simple">
+              <p>
                 {running
                   ? "Not enough data yet to suggest anything."
                   : "Suggestions appear while a camera session is running."}
-              </span>
+              </p>
             </div>
           ) : (
             <ul className="al-rec-list">
@@ -487,10 +509,12 @@ function Alerts() {
           )}
         </section>
 
-        {/* ---------- history ---------- */}
         <section className="al-section">
           <div className="al-section-head al-section-head--row">
             <div>
+              <div className="al-section-kicker">
+                <span>04</span> PAST ACTIVITY
+              </div>
               <h2>Alert history</h2>
               <p>Resolved alerts, newest first.</p>
             </div>
@@ -503,8 +527,8 @@ function Alerts() {
           </div>
 
           {history.length === 0 ? (
-            <div className="al-empty">
-              <span>No resolved alerts yet.</span>
+            <div className="al-empty al-empty--simple">
+              <p>No resolved alerts yet.</p>
             </div>
           ) : (
             <div className="al-history">
@@ -527,7 +551,9 @@ function Alerts() {
                     </span>
                     <small>
                       {REASON_LABELS[alert.resolved_reason] || "Resolved"}
-                      {alert.acknowledged ? " · acknowledged" : " · not acknowledged"}
+                      {alert.acknowledged
+                        ? " · acknowledged"
+                        : " · not acknowledged"}
                     </small>
                   </div>
 
@@ -544,39 +570,47 @@ function Alerts() {
           )}
         </section>
 
-        {/* ---------- settings ---------- */}
-        <section className="al-section">
+        <section className="al-section al-settings-section">
           <div className="al-section-head">
-            <h2>Alert settings</h2>
-            <p>
-              Set what counts as a problem for your institution. Alerts fire
-              only after a problem has lasted the time you choose, so a single
-              bad frame never triggers one.
-            </p>
+            <div>
+              <div className="al-section-kicker">
+                <span>05</span> CONFIGURATION
+              </div>
+              <h2>Alert settings</h2>
+              <p>
+                Configure when the system should raise alerts. A problem must
+                last for the selected duration; a single bad frame will not
+                trigger an alert.
+              </p>
+            </div>
           </div>
 
           {!draft ? (
-            <div className="al-empty">
-              <span>
+            <div className="al-empty al-empty--simple">
+              <p>
                 {offline
                   ? "Start the backend to edit settings."
                   : "Loading settings…"}
-              </span>
+              </p>
             </div>
           ) : (
             <div className="al-form">
-              <label className="al-switch">
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => setField("enabled", e.target.checked)}
-                />
-                <span>Raise alerts during camera sessions</span>
-              </label>
+              <div className="al-settings-intro">
+                <label className="al-switch">
+                  <input
+                    type="checkbox"
+                    checked={draft.enabled}
+                    onChange={(e) => setField("enabled", e.target.checked)}
+                  />
+                  <span>Raise alerts during camera sessions</span>
+                </label>
+                <span className={draft.enabled ? "al-enabled" : "al-disabled"}>
+                  {draft.enabled ? "ENABLED" : "DISABLED"}
+                </span>
+              </div>
 
-              {/* Teacher */}
               <fieldset>
-                <legend>Teacher presence</legend>
+                <legend><span>01</span> Teacher presence</legend>
 
                 <p className="al-hint">
                   The system detects people, not roles, so the teacher is the
@@ -660,9 +694,8 @@ function Alerts() {
                 />
               </fieldset>
 
-              {/* Engagement */}
               <fieldset>
-                <legend>Class engagement</legend>
+                <legend><span>02</span> Class engagement</legend>
 
                 <div className="al-grid">
                   <NumberField
@@ -716,9 +749,8 @@ function Alerts() {
                 </div>
               </fieldset>
 
-              {/* Schedule */}
               <fieldset>
-                <legend>Lecture hours</legend>
+                <legend><span>03</span> Lecture hours</legend>
 
                 <label className="al-switch">
                   <input
@@ -750,43 +782,44 @@ function Alerts() {
                     ))}
                   </div>
 
-                  <label className="al-field">
-                    <span>From</span>
-                    <input
-                      type="time"
-                      value={draft.schedule.start}
-                      disabled={!draft.schedule_enforced}
-                      onChange={(e) =>
-                        setField("schedule", {
-                          ...draft.schedule,
-                          start: e.target.value,
-                        })
-                      }
-                    />
-                  </label>
+                  <div className="al-time-fields">
+                    <label className="al-field">
+                      <span>From</span>
+                      <input
+                        type="time"
+                        value={draft.schedule.start}
+                        disabled={!draft.schedule_enforced}
+                        onChange={(e) =>
+                          setField("schedule", {
+                            ...draft.schedule,
+                            start: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
 
-                  <label className="al-field">
-                    <span>Until</span>
-                    <input
-                      type="time"
-                      value={draft.schedule.end}
-                      disabled={!draft.schedule_enforced}
-                      onChange={(e) =>
-                        setField("schedule", {
-                          ...draft.schedule,
-                          end: e.target.value,
-                        })
-                      }
-                    />
-                  </label>
+                    <label className="al-field">
+                      <span>Until</span>
+                      <input
+                        type="time"
+                        value={draft.schedule.end}
+                        disabled={!draft.schedule_enforced}
+                        onChange={(e) =>
+                          setField("schedule", {
+                            ...draft.schedule,
+                            end: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                 </div>
               </fieldset>
 
-              {/* Notifications */}
               <fieldset>
-                <legend>Notify by e-mail</legend>
+                <legend><span>04</span> E-mail notifications</legend>
 
-                <label className="al-field">
+                <label className="al-field al-email-field">
                   <span>Send each new alert to</span>
                   <input
                     type="email"
