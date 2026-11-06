@@ -171,6 +171,10 @@ def _new_record(student_id, box, now):
         "previous_eye_state": "Unknown",
         "drowsy_events": 0,
         "sleeping_events": 0,
+
+        # URL is served by Flask; no image bytes are stored in SQLite.
+        "photo_url": None,
+        "photo_quality": 0,
     }
 
 
@@ -355,6 +359,27 @@ class StudentRegistry:
 
     # --------------------------------------------------------
 
+    def photo_quality(self, student_id):
+        """Return the quality score of the currently stored student photo."""
+
+        with self._lock:
+            rec = self._students.get(student_id)
+            return rec.get("photo_quality", 0) if rec else 0
+
+    def set_photo(self, student_id, photo_url, quality):
+        """Keep only the best acceptable snapshot for this tracked student."""
+
+        with self._lock:
+            rec = self._students.get(student_id)
+            if rec is None or quality <= rec.get("photo_quality", 0):
+                return False
+
+            rec["photo_url"] = photo_url
+            rec["photo_quality"] = int(quality)
+            return True
+
+    # --------------------------------------------------------
+
     def _build_report(self, rec):
 
         # ---- emotion ------------------------------------------------
@@ -393,6 +418,7 @@ class StudentRegistry:
 
             "student_id": rec["id"],
             "name": rec["name"],
+            "photo_url": rec.get("photo_url"),
 
             # Live presence is not tracked; None = "summary of a recording".
             "in_view": None,

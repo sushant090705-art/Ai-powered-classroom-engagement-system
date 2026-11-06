@@ -61,7 +61,7 @@ function TrendLine({ trend }) {
   );
 }
 
-function ReportDetail({ report, onClose, onDelete }) {
+function ReportDetail({ report, onClose, onDelete, backendUrl }) {
   const reportRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -74,178 +74,302 @@ function ReportDetail({ report, onClose, onDelete }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
- 
+  const downloadPDF = async () => {
+    const element = reportRef.current;
 
-const downloadPDF = async () => {
-  const element = reportRef.current;
+    if (!element || downloading) return;
 
-  if (!element || downloading) return;
+    setDownloading(true);
 
-  setDownloading(true);
+    let pdfContainer = null;
 
-  let pdfContainer = null;
+    try {
+      // Create clone first.
+      const clone = element.cloneNode(true);
 
-  try {
-    const clone = element.cloneNode(true);
+      // Remove action buttons only.
+      clone.querySelectorAll(
+        ".ssr-modal-actions, button"
+      ).forEach((button) => button.remove());
 
-    const originalElements = [
-      element,
-      ...element.querySelectorAll("*"),
-    ];
+      // Sanitize unsupported CSS colors in the cloned report.
+      const originalElements = [
+        element,
+        ...element.querySelectorAll("*"),
+      ];
 
-    const clonedElements = [
-      clone,
-      ...clone.querySelectorAll("*"),
-    ];
+      const clonedElements = [
+        clone,
+        ...clone.querySelectorAll("*"),
+      ];
 
-    originalElements.forEach((original, index) => {
-      const copied = clonedElements[index];
-      const computed = window.getComputedStyle(original);
+      originalElements.forEach((original, index) => {
+        const copied = clonedElements[index];
+        if (!copied) return;
 
-      for (let i = 0; i < computed.length; i++) {
-        const property = computed[i];
-        let value = computed.getPropertyValue(property);
+        const computed = window.getComputedStyle(original);
 
-        if (/color\(/i.test(value)) {
-          if (property.includes("background")) {
-            value = "#080808";
-          } else if (property === "color") {
-            value = "#f5f5f5";
+        for (let i = 0; i < computed.length; i++) {
+          const property = computed[i];
+          const value = computed.getPropertyValue(property);
+
+          if (!/color\(/i.test(value)) continue;
+
+          if (property === "color") {
+            copied.style.setProperty(
+              property,
+              "#f5f5f5",
+              "important"
+            );
+          } else if (property.includes("background")) {
+            copied.style.setProperty(
+              property,
+              "#080808",
+              "important"
+            );
           } else if (property.includes("border")) {
-            value = "#303030";
+            copied.style.setProperty(
+              property,
+              "#303030",
+              "important"
+            );
           } else if (
             property === "fill" ||
             property === "stroke"
           ) {
-            value = "#a3e635";
+            copied.style.setProperty(
+              property,
+              "#a3e635",
+              "important"
+            );
           } else {
-            continue;
+            copied.style.removeProperty(property);
           }
         }
+      });
 
-        try {
-          copied.style.setProperty(property, value);
-        } catch {
-          // Ignore unsupported CSS properties.
+      // PDF rendering container.
+      pdfContainer = document.createElement("div");
+
+      Object.assign(pdfContainer.style, {
+        position: "fixed",
+        left: "-10000px",
+        top: "0",
+        width: "718px",
+        padding: "0",
+        margin: "0",
+        background: "#080808",
+        color: "#f5f5f5",
+        zIndex: "-1",
+        overflow: "visible",
+        boxSizing: "border-box",
+      });
+
+      const pdfStyle = document.createElement("style");
+
+      pdfStyle.textContent = `
+        .ssr-pdf-content {
+          width: 100% !important;
+          max-width: 100% !important;
+          height: auto !important;
+          min-height: 0 !important;
+          overflow: visible !important;
+          box-sizing: border-box !important;
         }
-      }
 
-      copied.removeAttribute("class");
-      copied.removeAttribute("id");
-    });
+        .ssr-pdf-content *,
+        .ssr-pdf-content *::before,
+        .ssr-pdf-content *::after {
+          box-sizing: border-box !important;
+        }
 
-    pdfContainer = document.createElement("div");
+        .ssr-two {
+          grid-template-columns: minmax(0, 1fr) !important;
+          width: 100% !important;
+        }
 
-    Object.assign(pdfContainer.style, {
-      position: "fixed",
-      left: "-10000px",
-      top: "0",
-      width: "794px",
-      background: "#080808",
-      color: "#f5f5f5",
-      zIndex: "-1",
-      overflow: "visible",
-    });
+        .ssr-stats {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          width: 100% !important;
+        }
 
-    clone.style.setProperty("width", "100%", "important");
-    clone.style.setProperty("height", "auto", "important");
-    clone.style.setProperty("overflow", "visible", "important");
-    clone.style.setProperty("background", "#080808", "important");
-    clone.style.setProperty("color", "#f5f5f5", "important");
+        .sr-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          width: 100% !important;
+        }
 
-    pdfContainer.appendChild(clone);
-    document.body.appendChild(pdfContainer);
+        .ssr-report-panel,
+        .ssr-stat-card,
+        .sr-card,
+        .ssr-group-heading {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
 
-    clone.querySelectorAll(
-      ".ssr-modal-actions, button"
-    ).forEach((button) => button.remove());
+        .ssr-report-section,
+        .ssr-students-section {
+          width: 100% !important;
+          overflow: visible !important;
+        }
 
-    const safeTitle = (report.title || "Session-Report")
-      .replace(/[<>:"/\\|?*]/g, "-")
-      .trim();
+        .ssr-chart-area,
+        .ssr-moods {
+          max-width: 100% !important;
+        }
 
-    const worker = html2pdf()
-      .set({
-        margin: [18, 12, 18, 12],
+        .ssr-pdf-footer {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+
+        img {
+          max-width: 100%;
+        }
+      `;
+
+      pdfContainer.appendChild(pdfStyle);
+
+      clone.style.setProperty("width", "100%", "important");
+      clone.style.setProperty("max-width", "100%", "important");
+      clone.style.setProperty("height", "auto", "important");
+      clone.style.setProperty("min-height", "0", "important");
+      clone.style.setProperty("overflow", "visible", "important");
+      clone.style.setProperty("background", "#080808", "important");
+      clone.style.setProperty("color", "#f5f5f5", "important");
+
+      pdfContainer.appendChild(clone);
+      document.body.appendChild(pdfContainer);
+
+      // Wait for images before generating PDF.
+      const images = Array.from(clone.querySelectorAll("img"));
+
+      await Promise.all(
+        images.map((img) => {
+          if (img.complete) return Promise.resolve();
+
+          return new Promise((resolve) => {
+            img.onload = resolve;
+            img.onerror = resolve;
+          });
+        })
+      );
+
+      const safeTitle = (report.title || "Session-Report")
+        .replace(/[<>:"/\\|?*]/g, "-")
+        .trim();
+
+      const options = {
+        margin: [17, 10, 17, 10],
         filename: `${safeTitle}.pdf`,
+
         image: {
           type: "jpeg",
-          quality: 0.98,
+          quality: 0.96,
         },
+
         html2canvas: {
           scale: 2,
           useCORS: true,
           backgroundColor: "#080808",
           logging: false,
           scrollY: 0,
-          windowWidth: 794,
+          windowWidth: 718,
         },
+
         jsPDF: {
           unit: "mm",
           format: "a4",
           orientation: "portrait",
+          compress: true,
         },
+
         pagebreak: {
           mode: ["css", "legacy"],
+          avoid: [
+            ".ssr-stat-card",
+            ".ssr-report-panel",
+            ".sr-card",
+            ".ssr-group-heading",
+          ],
         },
-      })
-      .from(clone)
-      .toPdf();
+      };
 
-    const pdf = await worker.get("pdf");
-    const totalPages = pdf.internal.getNumberOfPages();
+      const worker = html2pdf()
+        .set(options)
+        .from(clone)
+        .toPdf();
 
-    for (let page = 1; page <= totalPages; page++) {
-      pdf.setPage(page);
+      const pdf = await worker.get("pdf");
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
+      const totalPages = pdf.internal.getNumberOfPages();
 
-      // Header
-      pdf.setFillColor(8, 8, 8);
-      pdf.rect(0, 0, pageWidth, 13, "F");
+      for (let page = 1; page <= totalPages; page++) {
+        pdf.setPage(page);
 
-      pdf.setTextColor(163, 230, 53);
-      pdf.setFontSize(9);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("CLASSROOM AI", 12, 8);
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
 
-      pdf.setTextColor(190, 190, 190);
-      pdf.setFontSize(8);
-      pdf.setFont("helvetica", "normal");
-      pdf.text("SESSION ANALYTICS REPORT", pageWidth - 12, 8, {
-        align: "right",
-      });
+        // Header
+        pdf.setFillColor(8, 8, 8);
+        pdf.rect(0, 0, pageWidth, 13, "F");
 
-      // Footer
-      pdf.setDrawColor(70, 70, 70);
-      pdf.line(12, pageHeight - 13, pageWidth - 12, pageHeight - 13);
+        pdf.setTextColor(163, 230, 53);
+        pdf.setFontSize(9);
+        pdf.setFont("helvetica", "bold");
+        pdf.text("CLASSROOM AI", 12, 8);
 
-      pdf.setTextColor(170, 170, 170);
-      pdf.setFontSize(8);
-      pdf.text("Generated by ClassroomAI", 12, pageHeight - 7);
+        pdf.setTextColor(190, 190, 190);
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "normal");
 
-      pdf.text(
-        `Page ${page} of ${totalPages}`,
-        pageWidth - 12,
-        pageHeight - 7,
-        { align: "right" }
+        pdf.text(
+          "SESSION ANALYTICS REPORT",
+          pageWidth - 12,
+          8,
+          { align: "right" }
+        );
+
+        // Footer
+        pdf.setDrawColor(70, 70, 70);
+        pdf.line(
+          12,
+          pageHeight - 13,
+          pageWidth - 12,
+          pageHeight - 13
+        );
+
+        pdf.setTextColor(170, 170, 170);
+        pdf.setFontSize(8);
+
+        pdf.text(
+          "Generated by ClassroomAI",
+          12,
+          pageHeight - 7
+        );
+
+        pdf.text(
+          `Page ${page} of ${totalPages}`,
+          pageWidth - 12,
+          pageHeight - 7,
+          { align: "right" }
+        );
+      }
+
+      pdf.save(`${safeTitle}.pdf`);
+
+    } catch (error) {
+      console.error("PDF download failed:", error);
+      window.alert(
+        `PDF generation failed: ${error.message || "Please try again."}`
       );
+    } finally {
+      if (pdfContainer) {
+        pdfContainer.remove();
+      }
+
+      setDownloading(false);
     }
-
-    pdf.save(`${safeTitle}.pdf`);
-  } catch (error) {
-    console.error("PDF download failed:", error);
-    window.alert("PDF generation failed. Please try again.");
-  } finally {
-    if (pdfContainer) {
-      pdfContainer.remove();
-    }
-
-    setDownloading(false);
-  }
-};
-
+  };
 
   const moods = Object.entries(
     report.emotion_distribution || {}
@@ -434,9 +558,7 @@ const downloadPDF = async () => {
                       </div>
 
                       <div className="ssr-track">
-                        <div
-                          style={{ width: `${percent}%` }}
-                        />
+                        <div style={{ width: `${percent}%` }} />
                       </div>
                     </div>
                   ))}
@@ -485,6 +607,7 @@ const downloadPDF = async () => {
                         <StudentReportCard
                           key={student.student_id}
                           student={student}
+                          backendUrl={backendUrl}
                         />
                       ))}
                     </div>
@@ -699,6 +822,7 @@ function SessionReports({ backendUrl }) {
       {openReport && (
         <ReportDetail
           report={openReport}
+          backendUrl={backendUrl}
           onClose={() => setOpenReport(null)}
           onDelete={remove}
         />

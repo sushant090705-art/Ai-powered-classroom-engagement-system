@@ -17,7 +17,7 @@ import time
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_from_directory
 
 from analytics import get_session_snapshot
 from class_id import DEFAULT_CLASS_ID, normalize_class_id
@@ -250,6 +250,27 @@ def session_samples(session_id):
         "success": True,
         "samples": get_storage().get_samples(session_id),
     })
+
+
+
+@reports_bp.route(
+    "/student-photos/<class_id>/<session_id>/<filename>", methods=["GET"]
+)
+def student_photo(class_id, session_id, filename):
+    """Serve a saved student snapshot from its own class/session folder."""
+
+    class_id = normalize_class_id(class_id)
+    if not ID_PATTERN.match(session_id):
+        return jsonify({"success": False, "message": "Photo not found"}), 404
+
+    if not re.fullmatch(r"student_[1-9][0-9]*\.jpg", filename):
+        return jsonify({"success": False, "message": "Photo not found"}), 404
+
+    photo_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "data", "student_photos", class_id, session_id,
+    )
+    return send_from_directory(photo_dir, filename, max_age=3600)
 
 
 # ============================================================

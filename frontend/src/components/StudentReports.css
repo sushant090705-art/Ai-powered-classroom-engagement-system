@@ -139,9 +139,9 @@
 }
 
 .sr-avatar {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
   border-radius: 14px;
   background: var(--sr-accent-soft);
   border: 1px solid rgba(183, 243, 74, 0.2);
@@ -150,6 +150,21 @@
   place-items: center;
   font-size: 17px;
   font-weight: 800;
+}
+
+.sr-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.sr-avatar span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
 }
 
 .sr-identity {
@@ -485,4 +500,30 @@
   .sr-edit-btn {
     transition: none;
   }
+}
+
+/* Larger, clean student photo */
+.sr-avatar {
+  width: 110px;
+  height: 110px;
+  min-width: 110px;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #252525;
+}
+
+.sr-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sr-avatar span {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
 }

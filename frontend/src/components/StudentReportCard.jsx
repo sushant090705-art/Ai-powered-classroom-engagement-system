@@ -1,5 +1,8 @@
+
 import { useState } from "react";
 import "./StudentReports.css";
+
+const BACKEND_URL = "http://127.0.0.1:5000";
 
 const EMOTION_EMOJI = {
   happy: "😊",
@@ -39,6 +42,7 @@ function Pill({ tone, children }) {
 
 function Bar({ percent, tone }) {
   const width = Math.max(0, Math.min(100, Number(percent) || 0));
+
   return (
     <div className="sr-bar">
       <div
@@ -51,115 +55,81 @@ function Bar({ percent, tone }) {
 
 function dominantKey(counts) {
   const entries = Object.entries(counts || {});
-  if (entries.length === 0) return "Unknown";
+  if (!entries.length) return "Unknown";
   return entries.sort((a, b) => b[1] - a[1])[0][0];
 }
 
-/**
- * One student's report.
- *
- * Live classroom: student.in_view is true / false, so the card also shows
- * "right now" values. Recorded video: in_view is null, so the card shows
- * the summary of the whole video only.
- *
- * onRename(newName) is optional; without it the pencil icon is hidden.
- */
-function StudentReportCard({ student, onRename }) {
-  const [editing, setEditing] = useState(false);
-  const [draftName, setDraftName] = useState("");
+function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   const { emotion, attention, eyes, engagement } = student;
 
   const liveNow = student.in_view === true;
   const outOfView = student.in_view === false;
 
-  const startEditing = () => {
-    setDraftName(student.name);
-    setEditing(true);
-  };
-
-  const saveName = () => {
-    const name = draftName.trim();
-    setEditing(false);
-
-    if (name && name !== student.name && onRename) {
-      onRename(name);
-    }
-  };
-
   const topEmotions = emotion.distribution.slice(0, 3);
 
-  // Eyes: live shows the current state; a video shows the overall picture.
   const eyeHeadline = liveNow
     ? eyes.current
     : outOfView
-    ? "Unknown"
-    : `Mostly ${dominantKey(eyes.counts)}`;
+      ? "Unknown"
+      : `Mostly ${dominantKey(eyes.counts)}`;
 
   const eyeStatus = liveNow || outOfView
     ? eyes.status
     : eyes.sleeping_events > 0
-    ? "Sleeping"
-    : eyes.drowsy_events > 0
-    ? "Drowsy"
-    : "Alert";
+      ? "Sleeping"
+      : eyes.drowsy_events > 0
+        ? "Drowsy"
+        : "Alert";
+
+  const photoUrl = student.photo_url
+    ? `${backendUrl.replace(/\/$/, "")}/${student.photo_url.replace(/^\//, "")}`
+    : "";
 
   return (
     <article className={`sr-card ${outOfView ? "sr-card--away" : ""}`}>
-      {/* HEADER */}
       <header className="sr-card-head">
-        <div className="sr-avatar">{student.student_id}</div>
-
-        <div className="sr-identity">
-          {editing ? (
-            <input
-              className="sr-name-input"
-              value={draftName}
-              maxLength={40}
-              autoFocus
-              onChange={(e) => setDraftName(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveName();
-                if (e.key === "Escape") setEditing(false);
+        <div className="sr-avatar">
+          {photoUrl && !photoFailed ? (
+            <img
+              src={photoUrl}
+              alt={`Student ${student.student_id}`}
+              onError={() => {
+                console.error("Student photo failed to load:", photoUrl);
+                setPhotoFailed(true);
               }}
             />
           ) : (
-            <strong className="sr-name">
-              {student.name}
-              {onRename && (
-                <button
-                  type="button"
-                  className="sr-edit-btn"
-                  onClick={startEditing}
-                  title="Rename student"
-                  aria-label={`Rename ${student.name}`}
-                >
-                  ✎
-                </button>
-              )}
-            </strong>
+            <span>{student.student_id}</span>
           )}
-          <small>ID #{student.student_id}</small>
         </div>
 
-        {outOfView && <Pill tone="muted">Not in view</Pill>}
+        <div className="sr-identity">
+          <strong className="sr-name">
+            {student.name || `Student ${student.student_id}`}
+          </strong>
+          <small>Student ID: {student.student_id}</small>
+        </div>
       </header>
 
-      {/* OVERALL ENGAGEMENT */}
       <section className="sr-engagement">
         <div className="sr-engagement-top">
-          <span className="sr-label">Overall engagement</span>
-          <Pill tone={levelTone(engagement.level)}>{engagement.level}</Pill>
+          <span className="sr-label">Overall Engagement</span>
+          <Pill tone={levelTone(engagement.level)}>
+            {engagement.level}
+          </Pill>
         </div>
+
         <div className="sr-engagement-value">
-          {engagement.overall_percent}
-          <span>%</span>
+          {engagement.overall_percent}<span>%</span>
         </div>
+
         <Bar
           percent={engagement.overall_percent}
           tone={levelTone(engagement.level)}
         />
+
         {liveNow && (
           <small className="sr-sub">
             Right now: {engagement.current}%
@@ -167,22 +137,23 @@ function StudentReportCard({ student, onRename }) {
         )}
       </section>
 
-      {/* DETAILS */}
       <dl className="sr-details">
         <div className="sr-row">
           <dt>Emotion</dt>
           <dd>
             <strong>
               {emojiFor(emotion.dominant)} {emotion.dominant}
-            </strong>{" "}
-            <small className="sr-inline">overall</small>
+            </strong>
+            <small className="sr-inline">Overall</small>
+
             {topEmotions.length > 0 && (
               <small>
                 {topEmotions
-                  .map((e) => `${e.emotion} ${Math.round(e.percent)}%`)
+                  .map(e => `${e.emotion} ${Math.round(e.percent)}%`)
                   .join(" · ")}
               </small>
             )}
+
             {liveNow && emotion.current !== "Unknown" && (
               <small>Now: {emotion.current}</small>
             )}
@@ -193,7 +164,9 @@ function StudentReportCard({ student, onRename }) {
           <dt>Attention</dt>
           <dd>
             <strong>{attention.percent}%</strong>{" "}
-            <Pill tone={levelTone(attention.level)}>{attention.level}</Pill>
+            <Pill tone={levelTone(attention.level)}>
+              {attention.level}
+            </Pill>
             <Bar
               percent={attention.percent}
               tone={levelTone(attention.level)}
@@ -210,7 +183,8 @@ function StudentReportCard({ student, onRename }) {
               <Pill tone={levelTone(eyeStatus)}>{eyeStatus}</Pill>
             )}
             <small>
-              Drowsy {eyes.drowsy_events}× ({Math.round(eyes.drowsy_percent)}%)
+              Drowsy {eyes.drowsy_events}× (
+              {Math.round(eyes.drowsy_percent)}%)
               {" · "}
               Sleeping {eyes.sleeping_events}× (
               {Math.round(eyes.sleeping_percent)}%)
@@ -220,7 +194,7 @@ function StudentReportCard({ student, onRename }) {
       </dl>
 
       <footer className="sr-foot">
-        {student.in_view === null || student.in_view === undefined
+        {student.in_view == null
           ? `Detected in ${student.face_samples} analysed frames`
           : `Face visible ${student.face_visibility_percent}% of the time · ${student.samples} samples`}
       </footer>

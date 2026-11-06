@@ -1,3 +1,4 @@
+
 """Shared classroom engine (points 12 and 13).
 
 One ClassEngine = everything that belongs to ONE class / camera:
@@ -26,6 +27,7 @@ TensorFlow / YOLO.
 """
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -77,7 +79,7 @@ class ClassEngine:
         self.alert_engine = alert_engine
         self.registry = registry
         self.tracker = tracker
-        self.store = store          # None = do not write to the database
+        self.store = store
         self.kind = kind
 
         self.session_id = None
@@ -85,7 +87,7 @@ class ClassEngine:
 
         self._last_sample_at = None
 
-        # live camera state
+        # Live camera state
         self._frame = None
         self._results = []
         self._frame_lock = threading.Lock()
@@ -118,12 +120,11 @@ class ClassEngine:
         """Throw-away engine for ONE recorded video.
 
         Uses the video clock for everything, keeps nothing on disk and
-        never sends e-mail. alert_settings: the thresholds to apply
-        (usually the live class settings).
+        never sends e-mail.
         """
 
         settings = dict(alert_settings or {})
-        settings["schedule_enforced"] = False   # a video has no wall clock
+        settings["schedule_enforced"] = False
         settings["notify_email"] = ""
 
         registry = (
@@ -151,7 +152,7 @@ class ClassEngine:
     # --------------------------------------------------------
 
     def start_session(self, now=None):
-        """Reset all per-session state. `now` defaults to the wall clock."""
+        """Reset all per-session state."""
 
         self.session_id = uuid.uuid4().hex
         self._last_sample_at = None
@@ -159,7 +160,10 @@ class ClassEngine:
         self.analytics.start(now)
         self.registry.reset(now)
         self.tracker.reset()
-        self.alert_engine.start_session(now=now, session_id=self.session_id)
+        self.alert_engine.start_session(
+            now=now,
+            session_id=self.session_id
+        )
 
         if self.store is not None:
             try:
@@ -175,8 +179,7 @@ class ClassEngine:
         self.session_active = True
 
     def end_session(self, now=None):
-        """Stop alert monitoring. The analytics and registry keep their
-        data so the final report can still be built."""
+        """Stop alert monitoring while keeping report data."""
 
         self.alert_engine.end_session(now)
         self.session_active = False
@@ -186,13 +189,9 @@ class ClassEngine:
     # --------------------------------------------------------
 
     def detect(self, frame, face_scale_factor=1.3):
-        """Run the AI models on one frame.
+        """Run the AI models on one frame."""
 
-        Returns (results, person_boxes): one result dict per face and the
-        YOLO person boxes (used for the teacher-presence alert).
-        """
-
-        from ai_processing import process_frame     # lazy: loads models
+        from ai_processing import process_frame
 
         person_boxes = []
 
@@ -207,23 +206,20 @@ class ClassEngine:
         return results or [], person_boxes
 
     def ingest(
-        self, results, person_boxes, frame_shape, now=None, face_hook=None
+        self,
+        results,
+        person_boxes,
+        frame_shape,
+        now=None,
+        face_hook=None,
+        frame=None,
     ):
-        """Feed one AI cycle into students, analytics and alerts.
-
-        now        timestamp of the frame: None = wall clock (live), or the
-                   position in the video in seconds (recorded video).
-        face_hook  optional callable(student_id, face_dict, now) that may
-                   rewrite a face's eye_state before it is used anywhere
-                   (recorded video turns the raw reading into
-                   Blink / Drowsy / Sleeping on the video clock).
-
-        Returns the results, with the final eye_state of every face.
-        """
+        """Feed one AI cycle into students, analytics and alerts."""
 
         clock = time.time() if now is None else now
 
-        # ---- students (one record per tracked person) -------------
+        # ---- students ----------------------------------------
+
         detections = [
             (
                 (r["x"], r["y"], r["width"], r["height"]),
@@ -238,7 +234,81 @@ class ClassEngine:
         ]
 
         try:
-            self.registry.update(detections, now=now, face_hook=face_hook)
+            student_ids = self.registry.update(
+                detections,
+                now=now,
+                face_hook=face_hook
+            )
+
+            # Save clean face crops only for live sessions.
+            if (
+                frame is not None
+                and self.session_id
+                and self.kind == "live"
+            ):
+                try:
+                    from student_snapshots import save_clear_face_snapshot
+
+                    snapshot_root = os.path.join(
+                        os.path.dirname(os.path.abspath(__file__)),
+                        "data",
+                        "student_photos",
+                        self.class_id,
+                        self.session_id,
+                    )
+
+                    for student_id, (box, _face) in zip(
+                        student_ids, detections
+                    ):
+                        destination = os.path.join(
+                            snapshot_root,
+                            f"student_{student_id}.jpg"
+                        )
+
+                        os.makedirs(
+                            snapshot_root,
+                            exist_ok=True
+                        )
+
+                        quality = save_clear_face_snapshot(
+                            frame,
+                            box,
+                            destination + ".tmp.jpg"
+                        )
+
+                        if quality is not None:
+                            current = self.registry.photo_quality(
+                                student_id
+                            )
+
+                            if quality > current:
+                                os.replace(
+                                    destination + ".tmp.jpg",
+                                    destination
+                                )
+
+                                photo_url = (
+                                    f"/student-photos/{self.class_id}/"
+                                    f"{self.session_id}/"
+                                    f"student_{student_id}.jpg"
+                                )
+
+                                self.registry.set_photo(
+                                    student_id,
+                                    photo_url,
+                                    quality
+                                )
+                            else:
+                                try:
+                                    os.remove(destination + ".tmp.jpg")
+                                except OSError:
+                                    pass
+
+                except Exception:
+                    logger.exception(
+                        "Student snapshot capture failed [class %s]",
+                        self.class_id,
+                    )
 
             results = [
                 dict(result, eye_state=face["eye_state"])
@@ -247,24 +317,37 @@ class ClassEngine:
 
         except Exception:
             logger.exception(
-                "Student registry update failed [class %s]", self.class_id
+                "Student registry update failed [class %s]",
+                self.class_id
             )
 
-        # ---- analytics ------------------------------------------
+        # ---- analytics ----------------------------------------
+
         try:
             self.analytics.record(results, clock)
         except Exception:
-            logger.exception("Analytics update failed [class %s]", self.class_id)
+            logger.exception(
+                "Analytics update failed [class %s]",
+                self.class_id
+            )
 
-        # ---- alerts (also when nobody is visible: empty room) -----
+        # ---- alerts -------------------------------------------
+
         try:
             self.alert_engine.evaluate(
-                list(person_boxes), results, frame_shape, now=clock
+                list(person_boxes),
+                results,
+                frame_shape,
+                now=clock
             )
         except Exception:
-            logger.exception("Alert evaluation failed [class %s]", self.class_id)
+            logger.exception(
+                "Alert evaluation failed [class %s]",
+                self.class_id
+            )
 
-        # ---- time series in the database --------------------------
+        # ---- time series storage ------------------------------
+
         self._maybe_store_sample(results, clock)
 
         return results
@@ -286,19 +369,26 @@ class ClassEngine:
             engagement = sum(
                 calculate_engagement_score(r) for r in results
             ) / len(results)
+
             attention = sum(
                 calculate_attention_score(r) for r in results
             ) / len(results)
+
             drowsy = 100.0 * sum(
-                1 for r in results if r.get("eye_state") in DROWSY_STATES
+                1 for r in results
+                if r.get("eye_state") in DROWSY_STATES
             ) / len(results)
         else:
             engagement = attention = drowsy = None
 
         try:
             self.store.add_sample(
-                self.session_id, clock, len(results),
-                engagement, attention, drowsy,
+                self.session_id,
+                clock,
+                len(results),
+                engagement,
+                attention,
+                drowsy,
             )
         except Exception:
             logger.exception("Could not store engagement sample")
@@ -323,7 +413,7 @@ class ClassEngine:
             self._results = []
 
     def start(self):
-        """Start a live session and its AI thread. False if already running."""
+        """Start a live session and its AI thread."""
 
         with self._thread_lock:
 
@@ -341,6 +431,7 @@ class ClassEngine:
                 name=f"ai-{self.class_id}",
                 daemon=True,
             )
+
             self._thread.start()
 
             return True
@@ -352,14 +443,17 @@ class ClassEngine:
 
             was_running = self.running
             self.running = False
-            self._generation += 1       # an old thread must not keep running
+            self._generation += 1
 
         if was_running or self.session_active:
             self.end_session()
 
     def _loop(self, generation):
 
-        logger.info("AI processing thread started [class %s].", self.class_id)
+        logger.info(
+            "AI processing thread started [class %s].",
+            self.class_id
+        )
 
         last_cycle = 0.0
 
@@ -371,8 +465,12 @@ class ClassEngine:
                 time.sleep(0.01)
                 continue
 
+            # Get the latest camera frame.
             with self._frame_lock:
-                frame = None if self._frame is None else self._frame.copy()
+                frame = (
+                    None if self._frame is None
+                    else self._frame.copy()
+                )
 
             if frame is None:
                 time.sleep(0.05)
@@ -381,17 +479,37 @@ class ClassEngine:
             last_cycle = current
 
             try:
+                # IMPORTANT:
+                # Keep an untouched frame for student photo snapshots.
+                original_frame = frame.copy()
+
+                # Detection may draw boxes and labels on `frame`.
                 results, person_boxes = self.detect(frame)
-                results = self.ingest(results, person_boxes, frame.shape)
+
+                # Pass the untouched frame to ingest().
+                # Student snapshots will therefore have no detection boxes.
+                results = self.ingest(
+                    results,
+                    person_boxes,
+                    original_frame.shape,
+                    frame=original_frame
+                )
+
             except Exception:
-                logger.exception("AI cycle failed [class %s]", self.class_id)
-                time.sleep(AI_INTERVAL)     # do not spin on a broken model
+                logger.exception(
+                    "AI cycle failed [class %s]",
+                    self.class_id
+                )
+                time.sleep(AI_INTERVAL)
                 continue
 
             with self._results_lock:
                 self._results = results
 
-        logger.info("AI processing thread stopped [class %s].", self.class_id)
+        logger.info(
+            "AI processing thread stopped [class %s].",
+            self.class_id
+        )
 
 
 # ============================================================
