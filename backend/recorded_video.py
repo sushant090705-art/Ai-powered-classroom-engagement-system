@@ -323,6 +323,11 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
 
             small_frame = _shrink_if_large(frame)
 
+            # Keep a clean frame BEFORE detect(): process_frame() draws face/person
+            # rectangles directly onto the frame it receives. Snapshot crops must
+            # use this untouched copy so boxes never become part of student photos.
+            clean_frame = small_frame.copy()
+
             results, person_boxes = engine.detect(
                 small_frame,
                 face_scale_factor=FACE_SCALE_FACTOR
@@ -337,9 +342,10 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
             results = engine.ingest(
                 results,
                 person_boxes,
-                small_frame.shape,
+                clean_frame.shape,
                 now=t,
-                face_hook=eye_hook
+                face_hook=eye_hook,
+                frame=clean_frame
             )
 
             total_detections += len(results)

@@ -1,4 +1,3 @@
-
 """Shared classroom engine (points 12 and 13).
 
 One ClassEngine = everything that belongs to ONE class / camera:
@@ -240,11 +239,11 @@ class ClassEngine:
                 face_hook=face_hook
             )
 
-            # Save clean face crops only for live sessions.
+            # Save clean face crops for live and recorded sessions.
             if (
                 frame is not None
                 and self.session_id
-                and self.kind == "live"
+                and self.kind in ("live", "recorded")
             ):
                 try:
                     from student_snapshots import save_clear_face_snapshot

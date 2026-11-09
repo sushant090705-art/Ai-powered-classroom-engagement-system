@@ -56,36 +56,73 @@ function Bar({ percent, tone }) {
 function dominantKey(counts) {
   const entries = Object.entries(counts || {});
   if (!entries.length) return "Unknown";
-  return entries.sort((a, b) => b[1] - a[1])[0][0];
+  return entries.sort((a, b) => Number(b[1]) - Number(a[1]))[0][0];
+}
+
+function getPhotoUrl(photoUrl, backendUrl) {
+  if (!photoUrl || typeof photoUrl !== "string") {
+    return "";
+  }
+
+  const path = photoUrl.trim();
+
+  if (!path) {
+    return "";
+  }
+
+  // Already a complete URL or browser-supported image URL.
+  if (
+    path.startsWith("http://") ||
+    path.startsWith("https://") ||
+    path.startsWith("data:") ||
+    path.startsWith("blob:")
+  ) {
+    return path;
+  }
+
+  const baseUrl = backendUrl.replace(/\/+$/, "");
+  const cleanPath = path.replace(/^\/+/, "");
+
+  return `${baseUrl}/${cleanPath}`;
 }
 
 function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
   const [photoFailed, setPhotoFailed] = useState(false);
 
-  const { emotion, attention, eyes, engagement } = student;
+  const emotion = student.emotion || {};
+  const attention = student.attention || {};
+  const eyes = student.eyes || {};
+  const engagement = student.engagement || {};
 
   const liveNow = student.in_view === true;
   const outOfView = student.in_view === false;
 
-  const topEmotions = emotion.distribution.slice(0, 3);
+  const emotionDistribution = Array.isArray(emotion.distribution)
+    ? emotion.distribution
+    : [];
+
+  const topEmotions = emotionDistribution.slice(0, 3);
+
+  const eyeCounts = eyes.counts || {};
 
   const eyeHeadline = liveNow
-    ? eyes.current
+    ? eyes.current || "Unknown"
     : outOfView
       ? "Unknown"
-      : `Mostly ${dominantKey(eyes.counts)}`;
+      : `Mostly ${dominantKey(eyeCounts)}`;
 
   const eyeStatus = liveNow || outOfView
-    ? eyes.status
-    : eyes.sleeping_events > 0
+    ? eyes.status || "Unknown"
+    : Number(eyes.sleeping_events || 0) > 0
       ? "Sleeping"
-      : eyes.drowsy_events > 0
+      : Number(eyes.drowsy_events || 0) > 0
         ? "Drowsy"
         : "Alert";
 
-  const photoUrl = student.photo_url
-    ? `${backendUrl.replace(/\/$/, "")}/${student.photo_url.replace(/^\//, "")}`
-    : "";
+  const photoUrl = getPhotoUrl(student.photo_url, backendUrl);
+
+  const engagementPercent = Number(engagement.overall_percent) || 0;
+  const attentionPercent = Number(attention.percent) || 0;
 
   return (
     <article className={`sr-card ${outOfView ? "sr-card--away" : ""}`}>
@@ -95,8 +132,12 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
             <img
               src={photoUrl}
               alt={`Student ${student.student_id}`}
+              loading="lazy"
               onError={() => {
-                console.error("Student photo failed to load:", photoUrl);
+                console.error(
+                  `Photo failed for Student ${student.student_id}:`,
+                  photoUrl
+                );
                 setPhotoFailed(true);
               }}
             />
@@ -117,22 +158,22 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
         <div className="sr-engagement-top">
           <span className="sr-label">Overall Engagement</span>
           <Pill tone={levelTone(engagement.level)}>
-            {engagement.level}
+            {engagement.level || "Unknown"}
           </Pill>
         </div>
 
         <div className="sr-engagement-value">
-          {engagement.overall_percent}<span>%</span>
+          {engagementPercent}<span>%</span>
         </div>
 
         <Bar
-          percent={engagement.overall_percent}
+          percent={engagementPercent}
           tone={levelTone(engagement.level)}
         />
 
         {liveNow && (
           <small className="sr-sub">
-            Right now: {engagement.current}%
+            Right now: {Number(engagement.current) || 0}%
           </small>
         )}
       </section>
@@ -142,19 +183,25 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
           <dt>Emotion</dt>
           <dd>
             <strong>
-              {emojiFor(emotion.dominant)} {emotion.dominant}
+              {emojiFor(emotion.dominant)} {emotion.dominant || "Unknown"}
             </strong>
+
             <small className="sr-inline">Overall</small>
 
             {topEmotions.length > 0 && (
               <small>
                 {topEmotions
-                  .map(e => `${e.emotion} ${Math.round(e.percent)}%`)
+                  .map(
+                    (item) =>
+                      `${item.emotion || "Unknown"} ${Math.round(
+                        Number(item.percent) || 0
+                      )}%`
+                  )
                   .join(" · ")}
               </small>
             )}
 
-            {liveNow && emotion.current !== "Unknown" && (
+            {liveNow && emotion.current && emotion.current !== "Unknown" && (
               <small>Now: {emotion.current}</small>
             )}
           </dd>
@@ -163,14 +210,16 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
         <div className="sr-row">
           <dt>Attention</dt>
           <dd>
-            <strong>{attention.percent}%</strong>{" "}
+            <strong>{attentionPercent}%</strong>{" "}
             <Pill tone={levelTone(attention.level)}>
-              {attention.level}
+              {attention.level || "Unknown"}
             </Pill>
+
             <Bar
-              percent={attention.percent}
+              percent={attentionPercent}
               tone={levelTone(attention.level)}
             />
+
             <small>Based on eye state</small>
           </dd>
         </div>
@@ -179,15 +228,17 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
           <dt>Eyes</dt>
           <dd>
             <strong>{eyeHeadline}</strong>{" "}
+
             {eyeStatus !== eyeHeadline && (
               <Pill tone={levelTone(eyeStatus)}>{eyeStatus}</Pill>
             )}
+
             <small>
-              Drowsy {eyes.drowsy_events}× (
-              {Math.round(eyes.drowsy_percent)}%)
+              Drowsy {Number(eyes.drowsy_events) || 0}× (
+              {Math.round(Number(eyes.drowsy_percent) || 0)}%)
               {" · "}
-              Sleeping {eyes.sleeping_events}× (
-              {Math.round(eyes.sleeping_percent)}%)
+              Sleeping {Number(eyes.sleeping_events) || 0}× (
+              {Math.round(Number(eyes.sleeping_percent) || 0)}%)
             </small>
           </dd>
         </div>
@@ -195,8 +246,8 @@ function StudentReportCard({ student, backendUrl = BACKEND_URL }) {
 
       <footer className="sr-foot">
         {student.in_view == null
-          ? `Detected in ${student.face_samples} analysed frames`
-          : `Face visible ${student.face_visibility_percent}% of the time · ${student.samples} samples`}
+          ? `Detected in ${student.face_samples || 0} analysed frames`
+          : `Face visible ${Number(student.face_visibility_percent) || 0}% of the time · ${student.samples || 0} samples`}
       </footer>
     </article>
   );
