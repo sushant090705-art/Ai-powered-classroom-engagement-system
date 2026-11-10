@@ -33,6 +33,7 @@ from eye_state import (
     BLINK_DISPLAY_DURATION,
 )
 from student_reports import box_iou
+from student_snapshots import FACE_VERIFIED_MIN_QUALITY
 
 logger = logging.getLogger(__name__)
 
@@ -378,7 +379,9 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
                     else 0.0,
                     "Analyzing frames",
                     registry.build_reports(
-                        now=t, min_samples=MIN_SAMPLES
+                        now=t,
+                        min_samples=MIN_SAMPLES,
+                        min_photo_quality=FACE_VERIFIED_MIN_QUALITY
                     )["students_total"]
                 )
 
@@ -418,10 +421,20 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
             int(round(MIN_SAMPLE_SHARE * processed_frames))
         )
 
+        # Keep only students whose face was confirmed in at least one frame.
         report = registry.build_reports(
             now=last_time,
-            min_samples=min_samples
+            min_samples=min_samples,
+            min_photo_quality=FACE_VERIFIED_MIN_QUALITY
         )
+
+        # Safety net: if that removed everybody, fall back to the old rule
+        # instead of returning an empty report.
+        if report["students_total"] == 0:
+            report = registry.build_reports(
+                now=last_time,
+                min_samples=min_samples
+            )
 
         ignored = (
             registry.build_reports(now=last_time, min_samples=1)[

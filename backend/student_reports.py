@@ -461,12 +461,16 @@ class StudentRegistry:
 
     # --------------------------------------------------------
 
-    def build_reports(self, now=None, min_samples=0):
+    def build_reports(self, now=None, min_samples=0, min_photo_quality=0):
         """
         Full report for every student.
 
         min_samples drops "ghost" tracks that were seen too few times to be
         a real person.
+
+        min_photo_quality drops tracks whose best photo is below this score
+        (0 = keep everyone). Recorded video uses it to remove detections
+        that never showed a confirmed face (walls, posters, ...).
         """
 
         if now is None:
@@ -484,6 +488,7 @@ class StudentRegistry:
                 self._build_report(rec)
                 for _sid, rec in sorted(self._students.items())
                 if rec["samples"] >= min_samples
+                and rec.get("photo_quality", 0) >= min_photo_quality
             ]
 
         return {

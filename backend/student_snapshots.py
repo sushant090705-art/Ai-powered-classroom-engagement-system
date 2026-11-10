@@ -30,6 +30,12 @@ PAD_SIDE = 0.25             # extra margin left/right (share of face width)
 PAD_TOP = 0.35              # forehead / hair
 PAD_BOTTOM = 0.25           # chin / neck
 
+# Crops where a second face check confirmed a real face score >= this.
+# Unconfirmed crops (walls, posters, clothes) always score below it.
+FACE_VERIFIED_MIN_QUALITY = 50
+
+VERIFY_SIDE = 200           # crop is enlarged to this before verification
+
 MIN_OUTPUT_SIDE = 192       # small crops are enlarged to at least this
 MAX_OUTPUT_SIDE = 360       # huge crops are reduced to at most this
 
@@ -40,25 +46,50 @@ FACE_DETECTOR = cv2.CascadeClassifier(
 )
 
 
-def _looks_like_face(gray_crop):
-    """Bonus check: does a second detector also see a face here?"""
+def _looks_like_face(crop_bgr):
+    """Confirm there is a real face near the middle of the crop.
+
+    The crop is enlarged first, because small faces are missed by the
+    detector at their original size.
+    """
 
     if FACE_DETECTOR.empty():
         return False
 
     try:
-        enhanced = cv2.equalizeHist(gray_crop)
+        gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape[:2]
+
+        factor = max(1.0, VERIFY_SIDE / float(max(h, w)))
+
+        if factor > 1.0:
+            gray = cv2.resize(
+                gray,
+                (int(round(w * factor)), int(round(h * factor))),
+                interpolation=cv2.INTER_CUBIC,
+            )
+
+        gray = cv2.equalizeHist(gray)
+        big_h, big_w = gray.shape[:2]
 
         detections = FACE_DETECTOR.detectMultiScale(
-            enhanced,
-            scaleFactor=1.08,
-            minNeighbors=2,
-            minSize=(24, 24),
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=3,
+            minSize=(int(big_w * 0.30), int(big_h * 0.30)),
         )
     except cv2.error:
         return False
 
-    return len(detections) > 0
+    # The crop is centred on the face, so a real face sits near the middle.
+    for (fx, fy, fw, fh) in detections:
+        cx = (fx + fw / 2.0) / big_w
+        cy = (fy + fh / 2.0) / big_h
+
+        if 0.25 <= cx <= 0.75 and 0.20 <= cy <= 0.80:
+            return True
+
+    return False
 
 
 def _resize_for_display(crop):
@@ -162,18 +193,23 @@ def save_clear_face_snapshot(frame, box, destination, scale=1.0):
     light_score = max(0.0, 1.0 - abs(brightness - 128.0) / 128.0)
     contrast_score = min(1.0, contrast / 55.0)
     size_score = min(1.0, min(width, height) / 110.0)
-    face_bonus = 1.0 if _looks_like_face(gray) else 0.0
+    verified = _looks_like_face(crop)
 
-    quality = round(
-        100 * (
-            0.35 * sharp_score
-            + 0.20 * light_score
-            + 0.15 * contrast_score
-            + 0.20 * size_score
-            + 0.10 * face_bonus
-        )
+    detail_score = (
+        0.45 * sharp_score
+        + 0.20 * light_score
+        + 0.15 * contrast_score
+        + 0.20 * size_score
     )
-    quality = max(1, int(quality))
+
+    if verified:
+        # 50..100: a confirmed face always beats an unconfirmed crop.
+        quality = 50 + 50 * detail_score
+    else:
+        # 1..40: kept only as a last-resort photo.
+        quality = 40 * detail_score
+
+    quality = max(1, int(round(quality)))
 
     crop = _resize_for_display(crop)
 
