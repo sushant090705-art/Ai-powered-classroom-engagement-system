@@ -212,6 +212,7 @@ class ClassEngine:
         now=None,
         face_hook=None,
         frame=None,
+        snapshot_scale=1.0,
     ):
         """Feed one AI cycle into students, analytics and alerts."""
 
@@ -231,7 +232,7 @@ class ClassEngine:
             )
             for r in results
         ]
-
+        
         try:
             student_ids = self.registry.update(
                 detections,
@@ -272,7 +273,8 @@ class ClassEngine:
                         quality = save_clear_face_snapshot(
                             frame,
                             box,
-                            destination + ".tmp.jpg"
+                            destination + ".tmp.jpg",
+                            scale=snapshot_scale
                         )
 
                         if quality is not None:

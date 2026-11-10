@@ -1,8 +1,12 @@
-
-"""Quality-gated, clean face snapshots for student reports.
+"""Clean face snapshots for student reports.
 
 Only detector-provided face boxes are cropped. No identity recognition is
 performed; images are associated with temporary tracker-generated IDs.
+
+Design: a student should ALWAYS end up with a visible face photo. So the
+rules below only reject crops that are clearly unusable (outside the frame,
+tiny, black/white, featureless). Everything else gets a quality score and
+the engine keeps the BEST crop it ever sees for each student.
 """
 
 import os
@@ -11,76 +15,94 @@ import cv2
 import numpy as np
 
 
-# Load the face detector once.
-CASCADE_PATH = (
-    cv2.data.haarcascades
-    + "haarcascade_frontalface_default.xml"
+# ------------------------------------------------------------
+# TUNABLE SETTINGS (adjust here if photos are still too strict/loose)
+# ------------------------------------------------------------
+
+MIN_FACE_SIDE = 24          # px in the source frame; smaller = rejected
+MIN_VISIBLE_SHARE = 0.70    # share of the face box that must be in-frame
+MIN_BRIGHTNESS = 15
+MAX_BRIGHTNESS = 245
+MIN_CONTRAST = 8
+MIN_SHARPNESS = 5           # measured on a normalised 96x96 crop
+
+PAD_SIDE = 0.25             # extra margin left/right (share of face width)
+PAD_TOP = 0.35              # forehead / hair
+PAD_BOTTOM = 0.25           # chin / neck
+
+MIN_OUTPUT_SIDE = 192       # small crops are enlarged to at least this
+MAX_OUTPUT_SIDE = 360       # huge crops are reduced to at most this
+
+
+# Load the face detector once (used only as a quality bonus).
+FACE_DETECTOR = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
-FACE_DETECTOR = cv2.CascadeClassifier(CASCADE_PATH)
 
-
-def _is_valid_face_detection(gray_crop):
-    """Check whether the crop contains a reasonably central face."""
+def _looks_like_face(gray_crop):
+    """Bonus check: does a second detector also see a face here?"""
 
     if FACE_DETECTOR.empty():
         return False
 
-    if gray_crop is None or gray_crop.size == 0:
+    try:
+        enhanced = cv2.equalizeHist(gray_crop)
+
+        detections = FACE_DETECTOR.detectMultiScale(
+            enhanced,
+            scaleFactor=1.08,
+            minNeighbors=2,
+            minSize=(24, 24),
+        )
+    except cv2.error:
         return False
 
-    crop_h, crop_w = gray_crop.shape[:2]
-
-    if crop_h < 60 or crop_w < 60:
-        return False
-
-    # Improve contrast for secondary face detection.
-    enhanced = cv2.equalizeHist(gray_crop)
-
-    detections = FACE_DETECTOR.detectMultiScale(
-        enhanced,
-        scaleFactor=1.05,
-        minNeighbors=3,
-        minSize=(35, 35),
-    )
-
-    if len(detections) == 0:
-        return False
-
-    crop_center_x = crop_w / 2.0
-    crop_center_y = crop_h / 2.0
-
-    for (face_x, face_y, face_w, face_h) in detections:
-        face_center_x = face_x + face_w / 2.0
-        face_center_y = face_y + face_h / 2.0
-
-        distance_x = abs(face_center_x - crop_center_x)
-        distance_y = abs(face_center_y - crop_center_y)
-
-        # Allow some variation in face position inside the crop.
-        if (
-            distance_x <= crop_w * 0.42
-            and distance_y <= crop_h * 0.42
-        ):
-            return True
-
-    return False
+    return len(detections) > 0
 
 
-def save_clear_face_snapshot(frame, box, destination):
-    """Save a sharp, plausible face crop; return quality (0..100) or None."""
+def _resize_for_display(crop):
+    """Enlarge tiny crops / shrink huge ones so the photo looks clear."""
 
-    if frame is None or getattr(frame, "ndim", 0) != 3:
-        return None
+    h, w = crop.shape[:2]
+    longest = max(h, w)
 
-    if frame.size == 0:
+    if longest < MIN_OUTPUT_SIDE:
+        factor = MIN_OUTPUT_SIDE / float(longest)
+        return cv2.resize(
+            crop,
+            (int(round(w * factor)), int(round(h * factor))),
+            interpolation=cv2.INTER_LANCZOS4,
+        )
+
+    if longest > MAX_OUTPUT_SIDE:
+        factor = MAX_OUTPUT_SIDE / float(longest)
+        return cv2.resize(
+            crop,
+            (int(round(w * factor)), int(round(h * factor))),
+            interpolation=cv2.INTER_AREA,
+        )
+
+    return crop
+
+
+def save_clear_face_snapshot(frame, box, destination, scale=1.0):
+    """Save the face crop; return quality (1..100) or None if unusable.
+
+    frame:  untouched BGR frame (no boxes drawn on it).
+    box:    (x, y, w, h) in the coordinates the detector used.
+    scale:  frame_width / detector_frame_width. Use it when `frame` is a
+            higher-resolution version of the frame the detector saw.
+    """
+
+    if frame is None or getattr(frame, "ndim", 0) != 3 or frame.size == 0:
         return None
 
     frame_h, frame_w = frame.shape[:2]
 
     try:
         x, y, width, height = [
-            int(round(float(value))) for value in box
+            float(value) * float(scale) for value in box
         ]
     except (TypeError, ValueError, OverflowError):
         return None
@@ -88,42 +110,31 @@ def save_clear_face_snapshot(frame, box, destination):
     if width <= 0 or height <= 0:
         return None
 
-    # Permit some variation in detector face-box proportions.
-    ratio = width / float(height)
-
-    if ratio < 0.55 or ratio > 1.60:
+    if width < MIN_FACE_SIDE or height < MIN_FACE_SIDE:
         return None
 
-    # Allow smaller faces, but not tiny detections.
-    if width < 55 or height < 55:
+    # Face box must be mostly inside the frame (partial edge faces ok).
+    vis_w = min(frame_w, x + width) - max(0.0, x)
+    vis_h = min(frame_h, y + height) - max(0.0, y)
+
+    if vis_w <= 0 or vis_h <= 0:
         return None
 
-    # Reject boxes that are completely or partly outside the frame.
-    if (
-        x < 0
-        or y < 0
-        or x + width > frame_w
-        or y + height > frame_h
-    ):
+    if (vis_w * vis_h) / (width * height) < MIN_VISIBLE_SHARE:
         return None
 
-    # Add a modest margin around the detected face.
-    pad_x = max(4, int(width * 0.14))
-    pad_y = max(4, int(height * 0.14))
+    # Margin around the face so the whole head is visible.
+    left = int(max(0, round(x - width * PAD_SIDE)))
+    right = int(min(frame_w, round(x + width * (1 + PAD_SIDE))))
+    top = int(max(0, round(y - height * PAD_TOP)))
+    bottom = int(min(frame_h, round(y + height * (1 + PAD_BOTTOM))))
 
-    left = max(0, x - pad_x)
-    top = max(0, y - pad_y)
-    right = min(frame_w, x + width + pad_x)
-    bottom = min(frame_h, y + height + pad_y)
+    if right - left < MIN_FACE_SIDE or bottom - top < MIN_FACE_SIDE:
+        return None
 
     crop = frame[top:bottom, left:right].copy()
 
     if crop.size == 0:
-        return None
-
-    crop_h, crop_w = crop.shape[:2]
-
-    if crop_h < 60 or crop_w < 60:
         return None
 
     try:
@@ -131,42 +142,40 @@ def save_clear_face_snapshot(frame, box, destination):
     except cv2.error:
         return None
 
-    brightness = float(np.mean(gray))
-    contrast = float(np.std(gray))
-    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    # Measure quality on a fixed size so big and small faces compare fairly.
+    norm = cv2.resize(gray, (96, 96), interpolation=cv2.INTER_AREA)
 
-    # Reject extremely dark or overexposed images.
-    if brightness < 25 or brightness > 240:
+    brightness = float(np.mean(norm))
+    contrast = float(np.std(norm))
+    sharpness = float(cv2.Laplacian(norm, cv2.CV_64F).var())
+
+    if brightness < MIN_BRIGHTNESS or brightness > MAX_BRIGHTNESS:
         return None
 
-    # Reject nearly featureless crops.
-    if contrast < 12:
+    if contrast < MIN_CONTRAST:
         return None
 
-    # Reject heavily blurred crops.
-    if sharpness < 25:
+    if sharpness < MIN_SHARPNESS:
         return None
 
-    # Secondary verification helps reject false detections on clothing.
-    if not _is_valid_face_detection(gray):
-        return None
-
-    sharp_score = min(1.0, sharpness / 180.0)
-
-    light_score = max(
-        0.0,
-        1.0 - abs(brightness - 128.0) / 128.0
-    )
-
+    sharp_score = min(1.0, sharpness / 150.0)
+    light_score = max(0.0, 1.0 - abs(brightness - 128.0) / 128.0)
     contrast_score = min(1.0, contrast / 55.0)
+    size_score = min(1.0, min(width, height) / 110.0)
+    face_bonus = 1.0 if _looks_like_face(gray) else 0.0
 
     quality = round(
         100 * (
-            0.55 * sharp_score
-            + 0.25 * light_score
-            + 0.20 * contrast_score
+            0.35 * sharp_score
+            + 0.20 * light_score
+            + 0.15 * contrast_score
+            + 0.20 * size_score
+            + 0.10 * face_bonus
         )
     )
+    quality = max(1, int(quality))
+
+    crop = _resize_for_display(crop)
 
     folder = os.path.dirname(destination)
 
@@ -180,12 +189,9 @@ def save_clear_face_snapshot(frame, box, destination):
         saved = cv2.imwrite(
             destination,
             crop,
-            [int(cv2.IMWRITE_JPEG_QUALITY), 92],
+            [int(cv2.IMWRITE_JPEG_QUALITY), 95],
         )
     except (cv2.error, OSError):
         return None
 
-    if not saved:
-        return None
-
-    return quality
+    return quality if saved else None

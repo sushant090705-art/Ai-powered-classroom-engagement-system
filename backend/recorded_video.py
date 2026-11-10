@@ -328,6 +328,19 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
             # use this untouched copy so boxes never become part of student photos.
             clean_frame = small_frame.copy()
 
+            # Student photos are cut from the ORIGINAL full-resolution frame
+            # (sharper faces). `frame` is never drawn on, because detect()
+            # only draws on small_frame. If nothing was shrunk, small_frame
+            # IS frame, so use the clean copy instead.
+            if small_frame is frame:
+                snapshot_frame = clean_frame
+                snapshot_scale = 1.0
+            else:
+                snapshot_frame = frame
+                snapshot_scale = (
+                    frame.shape[1] / float(small_frame.shape[1])
+                )
+
             results, person_boxes = engine.detect(
                 small_frame,
                 face_scale_factor=FACE_SCALE_FACTOR
@@ -345,7 +358,8 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
                 clean_frame.shape,
                 now=t,
                 face_hook=eye_hook,
-                frame=clean_frame
+                frame=snapshot_frame,
+                snapshot_scale=snapshot_scale
             )
 
             total_detections += len(results)
