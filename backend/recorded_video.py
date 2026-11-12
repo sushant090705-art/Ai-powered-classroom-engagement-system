@@ -32,6 +32,7 @@ from eye_state import (
     SLEEPING_THRESHOLD,
     BLINK_DISPLAY_DURATION,
 )
+from face_checks import face_position_ok, looks_like_skin
 from student_reports import box_iou
 from student_snapshots import FACE_VERIFIED_MIN_QUALITY
 
@@ -68,7 +69,7 @@ FACE_SCALE_FACTOR = 1.1
 # (or this share of all sampled frames, whichever is larger). This removes
 # one-off false detections.
 MIN_SAMPLES = 3
-MIN_SAMPLE_SHARE = 0.05
+MIN_SAMPLE_SHARE = 0.25
 
 # How long (video seconds) a student can be missing and still be matched
 # loosely; after that they must reappear in the same place.
@@ -228,6 +229,46 @@ def _unique_faces(results):
     return unique
 
 
+def _plausible_faces(results, frame):
+    """Drop detections that are clearly not a face.
+
+    The Haar detector sometimes "finds" a face on jeans, a shirt or a
+    patterned wall. A real face (1) sits in the upper part of the person's
+    body box and (2) contains skin-coloured pixels. See face_checks.py.
+
+    frame must be the untouched frame in the detector's coordinates.
+    """
+
+    kept = []
+
+    frame_h, frame_w = frame.shape[:2]
+
+    for result in results:
+
+        if not face_position_ok(
+            result["y"],
+            result["height"],
+            result.get("person_y", 0),
+            result.get("person_height", 0),
+        ):
+            continue
+
+        x1 = max(0, int(result["x"]))
+        y1 = max(0, int(result["y"]))
+        x2 = min(frame_w, int(result["x"] + result["width"]))
+        y2 = min(frame_h, int(result["y"] + result["height"]))
+
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        if not looks_like_skin(frame[y1:y2, x1:x2]):
+            continue
+
+        kept.append(result)
+
+    return kept
+
+
 def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
     """
     Analyse a video file and return the JSON-ready result.
@@ -295,6 +336,7 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
 
         emotion_counts = {}
         total_detections = 0
+        rejected_detections = 0
         processed_frames = 0
         last_time = 0.0
 
@@ -348,6 +390,12 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
             )
 
             results = _unique_faces(results)
+
+            # Remove false "faces" (jeans, shirts, walls) BEFORE they are
+            # tracked, so they never become a student.
+            before = len(results)
+            results = _plausible_faces(results, clean_frame)
+            rejected_detections += before - len(results)
 
             processed_frames += 1
 
@@ -457,6 +505,13 @@ def analyze_video_file(video_path, progress=None, class_id=DEFAULT_CLASS_ID):
             notes.append(
                 f"{ignored} very brief detection(s) were ignored as "
                 "false detections."
+            )
+
+        if rejected_detections > 0:
+
+            notes.append(
+                f"{rejected_detections} detection(s) were rejected because "
+                "they did not look like a face (clothes, background)."
             )
 
         if report["students_total"] == 0:

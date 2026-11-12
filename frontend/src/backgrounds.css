@@ -1,0 +1,258 @@
+/* ==========================================================
+   PAGE BACKGROUND ARTWORK
+   Project-themed illustrations (classroom + face detection,
+   AI network, analytics, camera scan, alert radar).
+
+   Images live in:  frontend/public/backgrounds/
+   Every image sits BEHIND the page content (z-index: -1), has
+   pointer-events disabled, and fades out so cards and text stay
+   readable in both the light and the dark theme.
+========================================================== */
+
+:root {
+  --art-opacity: 0.85;
+  --art-hero-opacity: 0.9;
+}
+
+[data-theme="dark"] {
+  --art-opacity: 0.55;
+  --art-hero-opacity: 0.8;
+}
+
+
+/* ==========================================================
+   HOME PAGE
+========================================================== */
+
+.home-page {
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+}
+
+/* Hero banner: classroom with face-detection boxes.
+   Height = navbar (82px) + hero section (min-height 610px). */
+.home-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 700px;
+  z-index: -1;
+  pointer-events: none;
+
+  background: url("/backgrounds/hero-classroom.svg") center top / cover no-repeat;
+  opacity: var(--art-hero-opacity);
+
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+}
+
+/* Soft fade on the left so the hero text is always easy to read */
+.home-page::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 700px;
+  z-index: -1;
+  pointer-events: none;
+
+  background: linear-gradient(
+    90deg,
+    var(--bg-primary) 0%,
+    color-mix(in srgb, var(--bg-primary) 75%, transparent) 38%,
+    transparent 72%
+  );
+}
+
+/* Features: AI network */
+.home-features {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.home-features::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background: url("/backgrounds/ai-network.svg") center / cover no-repeat;
+  opacity: var(--art-opacity);
+
+  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%);
+  mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%);
+}
+
+/* How it works: camera viewfinder */
+.home-process {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.home-process::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background: url("/backgrounds/camera-scan.svg") center / cover no-repeat;
+  opacity: var(--art-opacity);
+
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 90%);
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 90%);
+}
+
+/* About card: analytics charts on the right side */
+.home-about {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.home-about::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background: url("/backgrounds/analytics-grid.svg") right center / cover no-repeat;
+  opacity: var(--art-opacity);
+
+  -webkit-mask-image: linear-gradient(90deg, transparent 15%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 15%, #000 100%);
+}
+
+
+/* ==========================================================
+   LOGIN / REGISTER
+========================================================== */
+
+.login-page,
+.register-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.login-page::before,
+.register-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background: url("/backgrounds/auth-bg.svg") center / cover no-repeat;
+  opacity: var(--art-opacity);
+
+  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse at 50% 50%, #000 30%, transparent 100%);
+}
+
+
+/* ==========================================================
+   APP PAGES (fixed to the screen, fade towards the bottom)
+========================================================== */
+
+.dashboard,
+.classroom-page,
+.analytics-page,
+.recorded-video-page,
+.al-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.dashboard::before,
+.classroom-page::before,
+.analytics-page::before,
+.recorded-video-page::before,
+.al-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+
+  background-position: center top;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: var(--art-opacity);
+
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 95%);
+  mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 95%);
+}
+
+/* Dashboard: AI network */
+.dashboard::before {
+  background-image: url("/backgrounds/ai-network.svg");
+}
+
+/* Live classroom: camera viewfinder */
+.classroom-page::before {
+  background-image: url("/backgrounds/camera-scan.svg");
+}
+
+/* Analytics: charts and trend lines */
+.analytics-page::before {
+  background-image: url("/backgrounds/analytics-grid.svg");
+}
+
+/* Recorded video: classroom with detection boxes */
+.recorded-video-page::before {
+  background-image: url("/backgrounds/hero-classroom.svg");
+}
+
+/* Alerts: radar */
+.al-page::before {
+  background-image: url("/backgrounds/alert-radar.svg");
+}
+
+
+/* ==========================================================
+   SMALL SCREENS: lighter art, shorter hero banner
+========================================================== */
+
+@media (max-width: 768px) {
+  :root {
+    --art-opacity: 0.6;
+    --art-hero-opacity: 0.6;
+  }
+
+  [data-theme="dark"] {
+    --art-opacity: 0.4;
+    --art-hero-opacity: 0.4;
+  }
+
+  .home-page::before,
+  .home-page::after {
+    height: 560px;
+  }
+}
+
+/* Print / PDF reports: no decorative backgrounds */
+@media print {
+  .home-page::before,
+  .home-page::after,
+  .home-features::before,
+  .home-process::before,
+  .home-about::before,
+  .login-page::before,
+  .register-page::before,
+  .dashboard::before,
+  .classroom-page::before,
+  .analytics-page::before,
+  .recorded-video-page::before,
+  .al-page::before {
+    display: none;
+  }
+}

@@ -10,6 +10,8 @@ import Register from "./pages/Register";
 import RecordedVideo from "./pages/RecordedVideo";
 import Alerts from "./pages/Alerts";
 
+import "./backgrounds.css";
+
 
 function App() {
   return (
