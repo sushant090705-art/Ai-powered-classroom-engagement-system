@@ -2,6 +2,7 @@
 /* =========================
    LIGHT THEME
 ========================= */
+
 :root {
   color-scheme: light;
 
@@ -38,6 +39,7 @@
 /* =========================
    PURE BLACK DARK THEME
 ========================= */
+
 [data-theme="dark"] {
   color-scheme: dark;
 
@@ -74,6 +76,7 @@
 /* =========================
    GLOBAL STYLES
 ========================= */
+
 * {
   box-sizing: border-box;
 }
@@ -87,10 +90,13 @@ body {
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-family: Inter, Arial, sans-serif;
+
   transition:
     background-color 0.25s ease,
     color 0.25s ease;
 }
+
+/* Form elements */
 
 button,
 input,
@@ -99,7 +105,10 @@ textarea {
   font: inherit;
 }
 
-/* Smooth theme transition */
+/* =========================
+   SMOOTH THEME TRANSITIONS
+========================= */
+
 body,
 .app,
 .navbar,
@@ -132,128 +141,8 @@ footer {
 }
 
 /* =================================
-   HOME PAGE - LIGHT MODE FIXES
+   STUDENT REPORT CARDS
 ================================= */
-
-:root:not([data-theme="dark"]) .home-page {
-  --home-bg: #f5f6f8;
-  --home-surface: #ffffff;
-  --home-card: #ffffff;
-  --home-border: #e2e5e9;
-  --home-text: #171717;
-  --home-muted: #626b75;
-  --home-accent: #65a30d;
-}
-
-/* Navbar */
-:root:not([data-theme="dark"]) .home-navbar {
-  border-color: #e0e0e0;
-}
-
-:root:not([data-theme="dark"]) .home-brand {
-  color: #171717;
-}
-
-:root:not([data-theme="dark"]) .home-nav-links a {
-  color: #626b75;
-}
-
-:root:not([data-theme="dark"]) .home-nav-links a:hover {
-  color: #65a30d;
-}
-
-:root:not([data-theme="dark"]) .home-login-btn {
-  background: #ffffff;
-  color: #171717;
-  border-color: #d1d5db;
-}
-
-/* Hero section */
-:root:not([data-theme="dark"]) .hero-copy h1 {
-  color: #171717;
-}
-
-:root:not([data-theme="dark"]) .hero-description {
-  color: #626b75;
-}
-
-:root:not([data-theme="dark"]) .hero-secondary-btn {
-  color: #333333;
-  border-color: #d1d5db;
-}
-
-:root:not([data-theme="dark"]) .hero-trust-row {
-  color: #626b75;
-}
-
-/* Dashboard preview remains a dark dashboard */
-:root:not([data-theme="dark"]) .preview-window {
-  background: #0c0c0e;
-  border-color: #303034;
-}
-
-:root:not([data-theme="dark"]) .preview-heading h3,
-:root:not([data-theme="dark"]) .preview-summary h4,
-:root:not([data-theme="dark"]) .metric-box strong {
-  color: #f5f5f5;
-}
-
-:root:not([data-theme="dark"]) .preview-summary p,
-:root:not([data-theme="dark"]) .preview-heading p,
-:root:not([data-theme="dark"]) .metric-box > span:nth-child(2) {
-  color: #a1a1aa;
-}
-
-/* Features */
-:root:not([data-theme="dark"]) .home-features,
-:root:not([data-theme="dark"]) .home-process {
-  background: #f5f6f8;
-  border-color: #e2e5e9;
-}
-
-:root:not([data-theme="dark"]) .home-section-heading h2,
-:root:not([data-theme="dark"]) .home-feature-card h3,
-:root:not([data-theme="dark"]) .process-step h3,
-:root:not([data-theme="dark"]) .home-about h2 {
-  color: #171717;
-}
-
-:root:not([data-theme="dark"]) .home-section-heading p,
-:root:not([data-theme="dark"]) .home-feature-card p,
-:root:not([data-theme="dark"]) .process-step p,
-:root:not([data-theme="dark"]) .home-about p {
-  color: #626b75;
-}
-
-:root:not([data-theme="dark"]) .home-feature-card {
-  background: #ffffff;
-  border-color: #e2e5e9;
-}
-
-:root:not([data-theme="dark"]) .process-step {
-  border-color: #d1d5db;
-}
-
-/* About section */
-:root:not([data-theme="dark"]) .home-about {
-  background: #ffffff;
-  border-color: #e2e5e9;
-}
-
-/* Footer */
-:root:not([data-theme="dark"]) .home-footer {
-  border-color: #e2e5e9;
-}
-
-:root:not([data-theme="dark"]) .footer-brand {
-  color: #171717;
-}
-
-:root:not([data-theme="dark"]) .home-footer p,
-:root:not([data-theme="dark"]) .footer-copyright {
-  color: #626b75;
-}
-
 
 .student-reports-grid {
   display: grid;

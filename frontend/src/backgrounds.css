@@ -1,12 +1,12 @@
+
 /* ==========================================================
    PAGE BACKGROUND ARTWORK
-   Project-themed illustrations (classroom + face detection,
-   AI network, analytics, camera scan, alert radar).
+   Professional AI Classroom Engagement System backgrounds.
 
-   Images live in:  frontend/public/backgrounds/
-   Every image sits BEHIND the page content (z-index: -1), has
-   pointer-events disabled, and fades out so cards and text stay
-   readable in both the light and the dark theme.
+   Images live in: frontend/public/backgrounds/
+
+   All artwork sits behind page content and does not
+   interfere with buttons, cards, text or interactions.
 ========================================================== */
 
 :root {
@@ -30,8 +30,8 @@
   overflow-x: hidden;
 }
 
-/* Hero banner: classroom with face-detection boxes.
-   Height = navbar (82px) + hero section (min-height 610px). */
+/* Hero: classroom background */
+
 .home-page::before {
   content: "";
   position: absolute;
@@ -42,14 +42,26 @@
   z-index: -1;
   pointer-events: none;
 
-  background: url("/backgrounds/hero-classroom.svg") center top / cover no-repeat;
+  background:
+    url("/backgrounds/analytics_classroom.jpg")
+    center top / cover no-repeat;
+
   opacity: var(--art-hero-opacity);
 
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 62%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 62%,
+    transparent 100%
+  );
 }
 
-/* Soft fade on the left so the hero text is always easy to read */
+/* Left-side readability overlay */
+
 .home-page::after {
   content: "";
   position: absolute;
@@ -68,7 +80,12 @@
   );
 }
 
-/* Features: AI network */
+
+/* ==========================================================
+   HOME FEATURES
+   AI network background
+========================================================== */
+
 .home-features {
   position: relative;
   isolation: isolate;
@@ -82,14 +99,30 @@
   z-index: -1;
   pointer-events: none;
 
-  background: url("/backgrounds/ai-network.svg") center / cover no-repeat;
+  background:
+    url("/backgrounds/network_abstract.jpg")
+    center / cover no-repeat;
+
   opacity: var(--art-opacity);
 
-  -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%);
-  mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 40%,
+    #000 20%,
+    transparent 85%
+  );
+  mask-image: radial-gradient(
+    ellipse at 50% 40%,
+    #000 20%,
+    transparent 85%
+  );
 }
 
-/* How it works: camera viewfinder */
+
+/* ==========================================================
+   HOW IT WORKS
+   Student detection background
+========================================================== */
+
 .home-process {
   position: relative;
   isolation: isolate;
@@ -103,14 +136,30 @@
   z-index: -1;
   pointer-events: none;
 
-  background: url("/backgrounds/camera-scan.svg") center / cover no-repeat;
+  background:
+    url("/backgrounds/student_detection.jpg")
+    center / cover no-repeat;
+
   opacity: var(--art-opacity);
 
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 90%);
-  mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 90%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 50%,
+    #000 25%,
+    transparent 90%
+  );
+  mask-image: radial-gradient(
+    ellipse at 50% 50%,
+    #000 25%,
+    transparent 90%
+  );
 }
 
-/* About card: analytics charts on the right side */
+
+/* ==========================================================
+   ABOUT SECTION
+   Analytics classroom background
+========================================================== */
+
 .home-about {
   position: relative;
   isolation: isolate;
@@ -124,16 +173,28 @@
   z-index: -1;
   pointer-events: none;
 
-  background: url("/backgrounds/analytics-grid.svg") right center / cover no-repeat;
+  background:
+    url("/backgrounds/analytics_classroom.jpg")
+    right center / cover no-repeat;
+
   opacity: var(--art-opacity);
 
-  -webkit-mask-image: linear-gradient(90deg, transparent 15%, #000 100%);
-  mask-image: linear-gradient(90deg, transparent 15%, #000 100%);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 15%,
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 15%,
+    #000 100%
+  );
 }
 
 
 /* ==========================================================
    LOGIN / REGISTER
+   Premium dark technology background
 ========================================================== */
 
 .login-page,
@@ -151,16 +212,27 @@
   z-index: -1;
   pointer-events: none;
 
-  background: url("/backgrounds/auth-bg.svg") center / cover no-repeat;
+  background:
+    url("/backgrounds/dark_tech_hero.jpg")
+    center / cover no-repeat;
+
   opacity: var(--art-opacity);
 
-  -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 30%, transparent 100%);
-  mask-image: radial-gradient(ellipse at 50% 50%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 50%,
+    #000 30%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    ellipse at 50% 50%,
+    #000 30%,
+    transparent 100%
+  );
 }
 
 
 /* ==========================================================
-   APP PAGES (fixed to the screen, fade towards the bottom)
+   APP PAGES
 ========================================================== */
 
 .dashboard,
@@ -186,40 +258,66 @@
   background-position: center top;
   background-size: cover;
   background-repeat: no-repeat;
+
   opacity: var(--art-opacity);
 
-  -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 95%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 35%, transparent 95%);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 35%,
+    transparent 95%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 35%,
+    transparent 95%
+  );
 }
 
-/* Dashboard: AI network */
+
+/* Dashboard: AI brain */
+
 .dashboard::before {
-  background-image: url("/backgrounds/ai-network.svg");
+  background-image:
+    url("/backgrounds/ai_brain.jpg");
 }
 
-/* Live classroom: camera viewfinder */
+
+/* Live classroom: student detection */
+
 .classroom-page::before {
-  background-image: url("/backgrounds/camera-scan.svg");
+  background-image:
+    url("/backgrounds/student_detection.jpg");
 }
 
-/* Analytics: charts and trend lines */
+
+/* Analytics: blue wave */
+
 .analytics-page::before {
-  background-image: url("/backgrounds/analytics-grid.svg");
+  background-image:
+    url("/backgrounds/blue_wave.jpg");
 }
 
-/* Recorded video: classroom with detection boxes */
+
+/* Recorded video: realistic classroom */
+
 .recorded-video-page::before {
-  background-image: url("/backgrounds/hero-classroom.svg");
+  background-image:
+    url("/backgrounds/empty_classroom.jpg");
 }
 
-/* Alerts: radar */
+
+/* Alerts: AI network */
+
 .al-page::before {
-  background-image: url("/backgrounds/alert-radar.svg");
+  background-image:
+    url("/backgrounds/network_abstract.jpg");
 }
 
 
 /* ==========================================================
-   SMALL SCREENS: lighter art, shorter hero banner
+   SMALL SCREENS
 ========================================================== */
 
 @media (max-width: 768px) {
@@ -239,7 +337,12 @@
   }
 }
 
-/* Print / PDF reports: no decorative backgrounds */
+
+/* ==========================================================
+   PRINT / PDF REPORTS
+   Remove decorative backgrounds
+========================================================== */
+
 @media print {
   .home-page::before,
   .home-page::after,
@@ -253,6 +356,6 @@
   .analytics-page::before,
   .recorded-video-page::before,
   .al-page::before {
-    display: none;
+    display: none !important;
   }
 }
