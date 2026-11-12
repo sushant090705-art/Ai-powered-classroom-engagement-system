@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "./context/ThemeContext";
 
 import Home from "./home";
+import About from "./pages/About";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Classroom from "./pages/Classroom";
@@ -10,8 +11,8 @@ import Register from "./pages/Register";
 import RecordedVideo from "./pages/RecordedVideo";
 import Alerts from "./pages/Alerts";
 
-import "./backgrounds.css";
 
+import "./backgrounds.css";
 
 function App() {
   return (
@@ -19,9 +20,11 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/classroom" element={<Classroom />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/recorded-video" element={<RecordedVideo />} />

@@ -377,3 +377,148 @@
     font-size: 27px;
   }
 }
+
+/* =========================================
+   CLASSROOM BACKGROUND - LOGIN PAGE
+   Same image as About page
+========================================= */
+
+.login-page {
+  position: relative;
+  isolation: isolate;
+  background-image:
+    linear-gradient(
+      rgba(0, 0, 0, 0.78),
+      rgba(0, 0, 0, 0.86)
+    ),
+    url("https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=2000&q=85");
+
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+/* Main login container */
+.login-layout {
+  background: rgba(10, 10, 10, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 25px 90px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Left showcase */
+.login-showcase {
+  background: rgba(10, 10, 10, 0.35);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.login-brand,
+.login-showcase-content h1,
+.login-benefit strong {
+  color: #ffffff;
+}
+
+.login-showcase-content > p,
+.login-benefit small,
+.login-showcase-footer {
+  color: #d0d0d0;
+}
+
+.login-benefit > span {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Right form section */
+.login-form-section {
+  background: rgba(12, 12, 12, 0.45);
+}
+
+.login-card h2,
+.login-card label {
+  color: #ffffff;
+}
+
+.login-subtitle {
+  color: #c4c4c4;
+}
+
+.login-card input {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.login-card input::placeholder {
+  color: #a1a1aa;
+}
+
+.create-account {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.back-home {
+  color: #d0d0d0;
+}
+
+/* Light mode */
+[data-theme="light"] .login-page {
+  background-image:
+    linear-gradient(
+      rgba(255, 255, 255, 0.76),
+      rgba(255, 255, 255, 0.84)
+    ),
+    url("https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=2000&q=85");
+}
+
+[data-theme="light"] .login-layout {
+  background: rgba(255, 255, 255, 0.93);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="light"] .login-showcase,
+[data-theme="light"] .login-form-section {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+[data-theme="light"] .login-brand,
+[data-theme="light"] .login-showcase-content h1,
+[data-theme="light"] .login-benefit strong,
+[data-theme="light"] .login-card h2,
+[data-theme="light"] .login-card label {
+  color: #171717;
+}
+
+[data-theme="light"] .login-showcase-content > p,
+[data-theme="light"] .login-benefit small,
+[data-theme="light"] .login-showcase-footer,
+[data-theme="light"] .login-subtitle,
+[data-theme="light"] .back-home {
+  color: #525252;
+}
+
+[data-theme="light"] .login-card input {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #d4d4d4;
+  color: #171717;
+}
+
+[data-theme="light"] .login-card input::placeholder {
+  color: #737373;
+}
+
+[data-theme="light"] .create-account {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: #d4d4d4;
+  color: #171717;
+}
+
+/* Mobile background compatibility */
+@media (max-width: 850px) {
+  .login-page {
+    background-attachment: scroll;
+  }
+}

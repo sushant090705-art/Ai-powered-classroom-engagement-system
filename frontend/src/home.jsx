@@ -1,6 +1,5 @@
-
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import ThemeToggle from "./components/ThemeToggle";
 import "./Home.css";
 
@@ -57,14 +56,16 @@ function Home() {
           aria-label="ClassroomAI home"
         >
           <span className="brand-mark">C</span>
-          <span>Classroom<span className="brand-highlight">AI</span></span>
+          <span>
+            Classroom<span className="brand-highlight">AI</span>
+          </span>
         </button>
 
         <div className="home-nav-links">
-          <a href="#home">Home</a>
+          <Link to="/">Home</Link>
           <a href="#features">Features</a>
           <a href="#how-it-works">How it works</a>
-          <a href="#about">About</a>
+          <Link to="/about">About</Link>
         </div>
 
         <div className="home-nav-actions">
@@ -125,6 +126,7 @@ function Home() {
                 ></span>
                 Backend: {backendStatus}
               </div>
+
               <span className="trust-divider"></span>
               <span>Built for educators</span>
             </div>
@@ -136,7 +138,9 @@ function Home() {
             <div className="preview-window">
               <div className="preview-topbar">
                 <div className="window-dots">
-                  <i></i><i></i><i></i>
+                  <i></i>
+                  <i></i>
+                  <i></i>
                 </div>
                 <span>CLASSROOM OVERVIEW</span>
                 <span className="preview-tag">SAMPLE</span>
@@ -231,9 +235,7 @@ function Home() {
               <article className="home-feature-card" key={feature.title}>
                 <div className="feature-card-top">
                   <span className="feature-card-icon">{feature.icon}</span>
-                  <span className="feature-number">
-                    0{index + 1}
-                  </span>
+                  <span className="feature-number">0{index + 1}</span>
                 </div>
                 <h3>{feature.title}</h3>
                 <p>{feature.description}</p>
@@ -297,7 +299,7 @@ function Home() {
 
           <button
             className="about-cta"
-            onClick={() => navigate("/login")}
+            onClick={() => navigate("/about")}
           >
             Explore the platform <span>→</span>
           </button>
@@ -305,12 +307,18 @@ function Home() {
       </main>
 
       <footer className="home-footer">
-        <button className="home-brand footer-brand" onClick={() => navigate("/")}>
+        <button
+          className="home-brand footer-brand"
+          onClick={() => navigate("/")}
+        >
           <span className="brand-mark">C</span>
-          <span>Classroom<span className="brand-highlight">AI</span></span>
+          <span>
+            Classroom<span className="brand-highlight">AI</span>
+          </span>
         </button>
 
         <p>Making classroom engagement easier to understand.</p>
+
         <span className="footer-copyright">
           © {new Date().getFullYear()} ClassroomAI. All rights reserved.
         </span>
