@@ -170,7 +170,7 @@ def write_test_video(path, seconds=40, fps=10, closed_from=2.0):
         pytest.skip("OpenCV cannot write test videos here")
 
     for i in range(seconds * fps):
-        value = 255 if i / fps >= closed_from else 0
+        value = 255 if i / fps >= closed_from else 128
         writer.write(np.full((240, 320, 3), value, dtype=np.uint8))
 
     writer.release()

@@ -103,21 +103,7 @@ class PersonTracker:
 
         try:
             from ultralytics.trackers.byte_tracker import BYTETracker
-
-            args = _load_settings(self._track_buffer, self._match_thresh)
-
-            # Some versions take frame_rate, some fps, some neither.
-            params = inspect.signature(BYTETracker.__init__).parameters
-
-            kwargs = {}
-
-            for name in ("frame_rate", "fps"):
-                if name in params:
-                    kwargs[name] = 30
-                    break
-
-            self._tracker = BYTETracker(args, **kwargs)
-
+            self._tracker = BYTETracker(self._args, frame_rate=30)
         except Exception:
             logger.exception(
                 "ByteTrack could not be created - falling back to IoU "
@@ -133,6 +119,13 @@ class PersonTracker:
         Returns [(x1, y1, x2, y2, person_id)] for every tracked person of
         this frame. person_id is None when tracking is not available.
         """
+
+        if boxes is None:
+            return []
+
+        # Test models may return a normal Python list instead of YOLO Boxes.
+        if not hasattr(boxes, "cpu"):
+            return _plain_boxes(boxes)
 
         if self._tracker is None:
             return _plain_boxes(boxes if boxes is not None else [])

@@ -507,17 +507,28 @@ class ClassEngine:
 
             return True
 
+
     def stop(self):
-        """Stop the AI thread and the alert session."""
+        """Stop the AI thread and wait for its current frame to finish."""
 
         with self._thread_lock:
-
             was_running = self.running
             self.running = False
             self._generation += 1
+            thread = self._thread
+
+        # Wait until the current AI processing cycle has completely finished.
+        # Do not join the current thread itself.
+        if thread is not None and thread is not threading.current_thread():
+            thread.join()
+
+        with self._thread_lock:
+            if self._thread is thread:
+                self._thread = None
 
         if was_running or self.session_active:
             self.end_session()
+
 
     def _loop(self, generation):
 

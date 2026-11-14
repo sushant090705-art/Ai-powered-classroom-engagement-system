@@ -243,8 +243,44 @@ def test_teacher_returning_clears_after_5_seconds():
 
 
 def test_teacher_check_is_off_by_default():
-    engine = new_engine()
+    engine = new_engine({
+        "students_absent_seconds": 3600
+    })
     assert run(engine, [], 0, 120, boxes=[]) == []
+
+
+# ============================================================
+# student absence
+# ============================================================
+
+def test_students_absent_raises_after_configured_time():
+    engine = new_engine({
+        "students_absent_seconds": 30
+    })
+
+    events = run(engine, [], 0, 35)
+
+    assert kinds(events) == [
+        ("raise", "STUDENTS_ABSENT")
+    ]
+
+def test_students_return_resolves_absence_alert():
+    engine = new_engine({
+        "students_absent_seconds": 30
+    })
+
+    run(engine, [], 0, 35)
+
+    events = run(
+        engine,
+        make_class(1),
+        36,
+        45
+    )
+
+    assert kinds(events) == [
+        ("clear", "STUDENTS_ABSENT")
+    ]
 
 
 # ============================================================
