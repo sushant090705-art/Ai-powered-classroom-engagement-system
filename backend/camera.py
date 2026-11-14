@@ -258,6 +258,7 @@ def connect_camera():
     engine.set_latest_frame(None)
     engine.clear_latest_results()
     engine.tracker.reset()
+    engine.reset_person_tracker()
 
     logger.info(
         "Camera source updated [%s]: [%s] %s", class_id, cam_type, new_source
@@ -315,6 +316,7 @@ def disconnect_camera():
     engine.set_latest_frame(None)
     engine.clear_latest_results()
     engine.tracker.reset()
+    engine.reset_person_tracker()
 
     logger.info("Camera disconnected [%s]", class_id)
 

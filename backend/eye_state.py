@@ -134,6 +134,44 @@ class EyeTracker:
 
     # --------------------------------------------------------
 
+    def get_track_id_for_person(self, person_id, center_x, center_y):
+        """Use a ByteTrack person id as the eye-track id (no guessing by
+        position): the same person always keeps the same eye timeline."""
+
+        now = self._clock()
+
+        with self._lock:
+
+            for track_id in [
+                tid for tid, track in self.tracks.items()
+                if now - track["last_seen"] > TRACK_STALE_SECONDS
+            ]:
+                del self.tracks[track_id]
+
+            track = self.tracks.get(person_id)
+
+            if track is None:
+
+                self.tracks[person_id] = {
+                    "center_x": center_x,
+                    "center_y": center_y,
+                    "last_seen": now,
+                    "previous_raw_state": "Unknown",
+                    "closed_since": None,
+                    "blink_until": 0,
+                    "was_sleeping": False,
+                }
+
+            else:
+
+                track["center_x"] = center_x
+                track["center_y"] = center_y
+                track["last_seen"] = now
+
+            return person_id
+
+    # --------------------------------------------------------
+
     def update_display_state(self, track_id, raw_state):
         """Convert a raw reading into Open/Close/Blink/Drowsy/Sleeping."""
 

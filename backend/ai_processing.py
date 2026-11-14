@@ -55,8 +55,36 @@ def stop_ai_thread(class_id=DEFAULT_CLASS_ID):
     get_class_engine(class_id).stop()
 
 
+def _appearance(person_crop):
+    """Colour fingerprint of a person's clothes (HSV histogram, sums to 1).
+
+    Used to re-link a person to the SAME student when ByteTrack loses them
+    and gives a new id. Taken from the lower 60% of the person box so the
+    face / background matter less."""
+
+    try:
+        h = person_crop.shape[0]
+        body = person_crop[int(h * 0.40):]
+
+        if body.size == 0:
+            return None
+
+        hsv = cv2.cvtColor(body, cv2.COLOR_BGR2HSV)
+        hist = cv2.calcHist([hsv], [0, 1], None, [12, 4], [0, 180, 0, 256])
+        total = float(hist.sum())
+
+        if total <= 0:
+            return None
+
+        return [float(v) for v in (hist.flatten() / total)]
+
+    except Exception:
+        return None
+
+
 def process_frame(
-    frame, face_scale_factor=1.3, tracker=None, person_boxes=None
+    frame, face_scale_factor=1.3, tracker=None, person_boxes=None,
+    person_tracker=None
 ):
     """Detect people, faces, emotions and eye states in ONE frame.
 
@@ -64,6 +92,9 @@ def process_frame(
                   is used when omitted).
     person_boxes  optional list that is filled with the YOLO person boxes
                   (x1, y1, x2, y2) - used by the teacher-presence alert.
+    person_tracker  the ByteTrack PersonTracker of this camera / class.
+                  Every result gets a stable "person_id" from it. Without
+                  one, person_id is None (old behaviour).
 
     Returns one result dict per face. The frame is annotated in place.
     """
@@ -93,12 +124,16 @@ def process_frame(
         # 2. PROCESS EACH PERSON
         # ====================================================
 
-        for box in yolo_results[0].boxes:
+        # ByteTrack: every person box gets a stable id across frames.
+        if person_tracker is not None:
+            person_tracks = person_tracker.update(yolo_results[0].boxes)
+        else:
+            person_tracks = [
+                (*map(int, box.xyxy[0].tolist()), None)
+                for box in yolo_results[0].boxes
+            ]
 
-            x1, y1, x2, y2 = map(
-                int,
-                box.xyxy[0].tolist()
-            )
+        for (x1, y1, x2, y2, person_id) in person_tracks:
 
             x1 = max(0, x1)
             y1 = max(0, y1)
@@ -124,6 +159,8 @@ def process_frame(
 
             # Remember this person for the student reports
             person_boxes.append((x1, y1, x2, y2))
+
+            person_appearance = _appearance(person_crop)
 
             # =================================================
             # 3. FACE DETECTION
@@ -411,10 +448,18 @@ def process_frame(
                     # 9. TRACK THIS FACE
                     # =================================================
 
-                    track_id = tracker.get_track_id(
-                        face_center_x,
-                        face_center_y
-                    )
+                    if person_id is not None:
+                        # Same person = same eye timeline (ByteTrack id)
+                        track_id = tracker.get_track_id_for_person(
+                            person_id,
+                            face_center_x,
+                            face_center_y
+                        )
+                    else:
+                        track_id = tracker.get_track_id(
+                            face_center_x,
+                            face_center_y
+                        )
 
                     # =================================================
                     # 10. CONVERT TO DISPLAY STATE
@@ -479,7 +524,13 @@ def process_frame(
 
                     "person_height": int(
                         y2 - y1
-                    )
+                    ),
+
+                    # ByteTrack id of the person (None = not tracked)
+                    "person_id": person_id,
+
+                    # clothes colour fingerprint (removed again in ingest)
+                    "appearance": person_appearance
                 }
 
                 results.append(result)
@@ -593,7 +644,10 @@ def process_frame(
 
             cv2.putText(
                 frame,
-                "Person",
+                (
+                    "Person" if person_id is None
+                    else f"Person #{person_id}"
+                ),
                 (
                     x1,
                     max(

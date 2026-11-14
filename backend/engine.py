@@ -40,8 +40,9 @@ from analytics import (
 )
 from class_id import DEFAULT_CLASS_ID, normalize_class_id
 from eye_state import EyeTracker
+from person_tracker import PersonTracker
 from storage import get_storage
-from student_reports import StudentRegistry
+from student_reports import StudentRegistry, box_iou
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class ClassEngine:
         tracker,
         store=None,
         kind="live",
+        person_tracker=None,
     ):
 
         self.class_id = class_id
@@ -78,6 +80,8 @@ class ClassEngine:
         self.alert_engine = alert_engine
         self.registry = registry
         self.tracker = tracker
+        # ByteTrack: stable person ids (one tracker per class, never shared)
+        self.person_tracker = person_tracker
         self.store = store
         self.kind = kind
 
@@ -112,6 +116,7 @@ class ClassEngine:
             tracker=EyeTracker(),
             store=get_storage(),
             kind="live",
+            person_tracker=PersonTracker(),
         )
 
     @classmethod
@@ -144,6 +149,7 @@ class ClassEngine:
             tracker=EyeTracker(),
             store=None,
             kind="recorded",
+            person_tracker=PersonTracker(),
         )
 
     # --------------------------------------------------------
@@ -159,6 +165,7 @@ class ClassEngine:
         self.analytics.start(now)
         self.registry.reset(now)
         self.tracker.reset()
+        self.reset_person_tracker()
         self.alert_engine.start_session(
             now=now,
             session_id=self.session_id
@@ -176,6 +183,12 @@ class ClassEngine:
                 logger.exception("Could not open session in the database")
 
         self.session_active = True
+
+    def reset_person_tracker(self):
+        """Forget every ByteTrack track (new session / camera change)."""
+
+        if self.person_tracker is not None:
+            self.person_tracker.reset()
 
     def end_session(self, now=None):
         """Stop alert monitoring while keeping report data."""
@@ -200,6 +213,7 @@ class ClassEngine:
                 face_scale_factor=face_scale_factor,
                 tracker=self.tracker,
                 person_boxes=person_boxes,
+                person_tracker=self.person_tracker,
             )
 
         return results or [], person_boxes
@@ -218,6 +232,11 @@ class ClassEngine:
 
         clock = time.time() if now is None else now
 
+        # One face = one student per frame. Removes a second face of the
+        # same tracked person AND the same face found twice through two
+        # overlapping person boxes.
+        results = self._one_face_per_person(results)
+
         # ---- students ----------------------------------------
 
         detections = [
@@ -228,16 +247,18 @@ class ClassEngine:
                     "confidence": r["confidence"],
                     "eye_state": r["eye_state"],
                     "eye_confidence": r["eye_confidence"],
+                    "appearance": r.get("appearance"),
                 },
             )
             for r in results
         ]
-        
+
         try:
             student_ids = self.registry.update(
                 detections,
                 now=now,
-                face_hook=face_hook
+                face_hook=face_hook,
+                person_ids=[r.get("person_id") for r in results],
             )
 
             # Save clean face crops for live and recorded sessions.
@@ -311,9 +332,16 @@ class ClassEngine:
                         self.class_id,
                     )
 
+            # student_id = the stable "Student N" of this face
             results = [
-                dict(result, eye_state=face["eye_state"])
-                for result, (_box, face) in zip(results, detections)
+                dict(
+                    {k: v for k, v in result.items() if k != "appearance"},
+                    eye_state=face["eye_state"],
+                    student_id=student_id,
+                )
+                for result, (_box, face), student_id in zip(
+                    results, detections, student_ids
+                )
             ]
 
         except Exception:
@@ -352,6 +380,48 @@ class ClassEngine:
         self._maybe_store_sample(results, clock)
 
         return results
+
+    @staticmethod
+    def _one_face_per_person(results):
+        """One face = one student per frame.
+
+        Drops (1) a second face of the same ByteTrack person and (2) the
+        SAME face found twice through two overlapping person boxes (two
+        different person ids). The larger face is kept."""
+
+        def face_box(r):
+            return (r["x"], r["y"], r["width"], r["height"])
+
+        order = sorted(
+            range(len(results)),
+            key=lambda i: results[i]["width"] * results[i]["height"],
+            reverse=True,
+        )
+
+        keep = []
+        seen_person_ids = set()
+
+        for i in order:
+
+            person_id = results[i].get("person_id")
+
+            if person_id is not None and person_id in seen_person_ids:
+                continue
+
+            if any(
+                box_iou(face_box(results[i]), face_box(results[k])) >= 0.4
+                for k in keep
+            ):
+                continue
+
+            keep.append(i)
+
+            if person_id is not None:
+                seen_person_ids.add(person_id)
+
+        kept = set(keep)
+
+        return [r for i, r in enumerate(results) if i in kept]
 
     def _maybe_store_sample(self, results, clock):
 

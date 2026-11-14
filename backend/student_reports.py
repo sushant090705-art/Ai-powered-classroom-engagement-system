@@ -10,8 +10,11 @@ analytics.py (calculate_engagement_score / calculate_attention_score), so
 per-student numbers use the same formulas as the Analytics page.
 
 There is no face recognition in this project, so a "student" is a tracked
-person: the same position keeps the same ID (Student 1, 2, 3 ...). There is
-deliberately no attendance concept in these reports.
+person (Student 1, 2, 3 ...). The id comes from ByteTrack (person_tracker.py):
+every YOLO person gets a stable `person_id`, and this registry maps each
+person_id to ONE student for the whole session. If ByteTrack is not
+available (person_id is None) the old box-overlap matching is used instead.
+There is deliberately no attendance concept in these reports.
 """
 
 import threading
@@ -30,6 +33,15 @@ from analytics import (
 # If a student has not been seen for this long (in the clock the caller
 # passes as `now`), they may only be re-matched at (nearly) the same place.
 PRESENT_TIMEOUT = 3.0
+
+# A NEW ByteTrack id may be linked back to an absent student by clothes
+# colour (not only by seat) when that student was lost at most this long ago.
+RELINK_WINDOW = 30.0
+
+# Histogram intersection (0..1) needed for that. Raise it if different
+# students get merged (e.g. same uniform), lower it if one student still
+# splits in two.
+APPEARANCE_RELINK_MIN = 0.70
 
 
 # ============================================================
@@ -143,6 +155,15 @@ def _match_score(box, previous_box, strict):
     return None
 
 
+def appearance_similarity(a, b):
+    """Histogram intersection of two colour fingerprints (0..1)."""
+
+    if not a or not b or len(a) != len(b):
+        return 0.0
+
+    return float(sum(min(x, y) for x, y in zip(a, b)))
+
+
 # ============================================================
 # STUDENT RECORD
 # ============================================================
@@ -155,6 +176,7 @@ def _new_record(student_id, box, now):
 
         "last_seen": now,
         "box": box,
+        "appearance": None,
 
         "samples": 0,
 
@@ -246,6 +268,9 @@ class StudentRegistry:
         self._next_id = 1
         self._session_start = None
 
+        # ByteTrack person_id -> student id
+        self._person_to_student = {}
+
     # --------------------------------------------------------
 
     def reset(self, now=None):
@@ -253,12 +278,15 @@ class StudentRegistry:
         with self._lock:
 
             self._students.clear()
+            self._person_to_student.clear()
             self._next_id = 1
             self._session_start = now if now is not None else time.time()
 
     # --------------------------------------------------------
 
-    def update(self, detections, now=None, face_hook=None):
+    def update(
+        self, detections, now=None, face_hook=None, person_ids=None
+    ):
         """
         detections: list of ((x, y, w, h), face_dict)
                     face_dict has at least emotion and eye_state.
@@ -267,24 +295,64 @@ class StudentRegistry:
                     Blink / Drowsy / Sleeping on the video clock) before it
                     is recorded.
 
+        person_ids: optional ByteTrack person id of every detection (same
+                    order). None / a None entry = not tracked: that
+                    detection is matched by box overlap like before.
+
         Returns the student id of every detection, in order.
         """
 
         if now is None:
             now = time.time()
 
+        if person_ids is None:
+            person_ids = [None] * len(detections)
+
         with self._lock:
 
             if self._session_start is None:
                 self._session_start = now
 
-            # ---- match detections to known students (one-to-one) ------
+            assigned = {}
+            used_students = set()
+
+            # ---- 1. ByteTrack: same person_id = same student ----------
+
+            for det_index, person_id in enumerate(person_ids):
+
+                if person_id is None:
+                    continue
+
+                student_id = self._person_to_student.get(person_id)
+
+                if student_id is None or student_id in used_students:
+                    continue
+
+                assigned[det_index] = student_id
+                used_students.add(student_id)
+
+            # ---- 2. the rest: match to known students by box ----------
+            #
+            # * detections WITHOUT a person_id: old matching.
+            # * a NEW person_id: ByteTrack lost the person and gave a
+            #   fresh id. Re-link to a student who is absent right now:
+            #   by seat (strict box match) or, if the student was lost
+            #   only a short while ago, by clothes colour.
 
             candidates = []
 
             for det_index, (box, _face) in enumerate(detections):
 
+                if det_index in assigned:
+                    continue
+
+                tracked = person_ids[det_index] is not None
+                appearance = detections[det_index][1].get("appearance")
+
                 for student_id, rec in self._students.items():
+
+                    if student_id in used_students:
+                        continue
 
                     recently_seen = (
                         (now - rec["last_seen"]) <= self.present_timeout
@@ -293,16 +361,25 @@ class StudentRegistry:
                     score = _match_score(
                         box,
                         rec["box"],
-                        strict=not recently_seen
+                        strict=tracked or not recently_seen
                     )
+
+                    # New ByteTrack id, student gone only a short while:
+                    # same clothes colour = same student, even if the
+                    # person moved to another place.
+                    if tracked and (now - rec["last_seen"]) <= RELINK_WINDOW:
+
+                        similarity = appearance_similarity(
+                            appearance, rec.get("appearance")
+                        )
+
+                        if similarity >= APPEARANCE_RELINK_MIN:
+                            score = max(score or 0.0, 0.5 * similarity)
 
                     if score is not None:
                         candidates.append((score, det_index, student_id))
 
             candidates.sort(reverse=True)
-
-            assigned = {}
-            used_students = set()
 
             for _score, det_index, student_id in candidates:
 
@@ -331,10 +408,33 @@ class StudentRegistry:
 
                 rec = self._students[student_id]
 
+                # Remember: this ByteTrack id belongs to this student.
+                person_id = person_ids[det_index]
+
+                if person_id is not None:
+
+                    for old_pid in [
+                        pid for pid, sid in self._person_to_student.items()
+                        if sid == student_id and pid != person_id
+                    ]:
+                        del self._person_to_student[old_pid]
+
+                    self._person_to_student[person_id] = student_id
+
                 rec["box"] = box
                 rec["last_seen"] = now
-
                 result_ids.append(student_id)
+
+                # running average of the clothes colour fingerprint
+                appearance = face.get("appearance")
+
+                if appearance:
+                    old = rec.get("appearance")
+                    rec["appearance"] = (
+                        list(appearance)
+                        if not old or len(old) != len(appearance)
+                        else [0.9 * o + 0.1 * n for o, n in zip(old, appearance)]
+                    )
 
                 if face_hook is not None:
                     face_hook(student_id, face, now)
