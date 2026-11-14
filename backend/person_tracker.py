@@ -37,13 +37,20 @@ class PersonTracker:
     def _create(self):
         try:
             from ultralytics.trackers.byte_tracker import BYTETracker
-            self._tracker = BYTETracker(self._args, frame_rate=30)
+            self._tracker = BYTETracker(self._args)
         except Exception:
             logger.exception("ByteTrack could not be created - IoU fallback")
             self._tracker = None
 
     def update(self, boxes):
         """Returns [(x1, y1, x2, y2, person_id)]. person_id None = no tracking."""
+
+        if boxes is None:
+            return []
+
+        # Test models may return a normal Python list instead of YOLO Boxes.
+        if not hasattr(boxes, "cpu"):
+            return _plain_boxes(boxes)
 
         if self._tracker is None:
             return _plain_boxes(boxes if boxes is not None else [])

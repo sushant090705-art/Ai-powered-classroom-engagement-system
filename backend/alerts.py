@@ -113,6 +113,9 @@ DEFAULT_SETTINGS = {
     "drowsy_share_threshold": 30,       # percent of visible students
     "drowsy_seconds": 60,
 
+    # Student absence detection
+    "students_absent_seconds": 30,
+
     "min_students": 2,                  # faces needed to judge the class
     "smoothing_seconds": 20,
 
@@ -135,6 +138,7 @@ INTEGER_LIMITS = {
     "disengagement_seconds": (10, 3600),
     "drowsy_share_threshold": (5, 100),
     "drowsy_seconds": (10, 3600),
+    "students_absent_seconds": (10, 3600),
     "min_students": (1, 200),
     "smoothing_seconds": (5, 120),
 }
@@ -480,7 +484,12 @@ class Condition:
 # ENGINE
 # ============================================================
 
-ALERT_TYPES = ("TEACHER_ABSENT", "LOW_ENGAGEMENT", "CLASS_DROWSY")
+ALERT_TYPES = (
+    "TEACHER_ABSENT",
+    "LOW_ENGAGEMENT",
+    "CLASS_DROWSY",
+    "STUDENTS_ABSENT",
+)
 
 
 class AlertEngine:
@@ -764,6 +773,25 @@ class AlertEngine:
             if outcome:
                 events.append(self._apply(outcome, "TEACHER_ABSENT", now))
 
+
+            # ---------------- student absence ----------------
+
+            students_absent = len(results) == 0
+
+            condition = self.conditions["STUDENTS_ABSENT"]
+
+            outcome = condition.update(
+                "bad" if students_absent else "good",
+                now,
+                hold=settings["students_absent_seconds"],
+                clear=5,
+            )
+
+            if outcome:
+                events.append(
+                    self._apply(outcome, "STUDENTS_ABSENT", now)
+                )
+
             # ---------------- class metrics ----------------
 
             enough_faces = len(results) >= settings["min_students"]
@@ -923,6 +951,23 @@ class AlertEngine:
                 "seconds": seconds,
                 "engagement": status["engagement"],
                 "threshold": settings["disengagement_threshold"],
+            }
+
+        elif alert_type == "STUDENTS_ABSENT":
+
+            seconds = settings["students_absent_seconds"]
+            severity = "critical"
+
+            title = "No Students Detected"
+
+            message = (
+                f"No students were detected in the classroom "
+                f"for {_fmt_duration(seconds)}."
+            )
+
+            details = {
+                "seconds": seconds,
+                "students_detected": 0,
             }
 
         else:  # CLASS_DROWSY
