@@ -367,7 +367,7 @@ class StudentRegistry:
                     # New ByteTrack id, student gone only a short while:
                     # same clothes colour = same student, even if the
                     # person moved to another place.
-                    if tracked and (now - rec["last_seen"]) <= RELINK_WINDOW:
+                    if (now - rec["last_seen"]) <= RELINK_WINDOW:
 
                         similarity = appearance_similarity(
                             appearance, rec.get("appearance")
